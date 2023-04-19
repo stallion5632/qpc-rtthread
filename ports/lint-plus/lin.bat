@@ -26,7 +26,7 @@
 @setlocal
 
 :: usage of lin.bat
-@echo Usage: lin [16bit] [-d...]
+@echo Usage: lin [16bit] [-u...] files
 @echo examples:
 @echo lin -uQ_SPY -uQ_UTEST : use 32bit CPU (default) and undefine Q_SPY/Q_UTEST
 @echo lin 16bit -uQ_SPY : use 16bit CPU includes and undefine Q_SPY

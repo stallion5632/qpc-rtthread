@@ -23,8 +23,8 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2022-10-18
-* @version Last updated for: @ref qpc_7_1_3
+* @date Last updated on: 2023-04-12
+* @version Last updated for: @ref qpc_7_2_2
 *
 * @file
 * @brief QF/C port to FreeRTOS 10.x
@@ -253,7 +253,7 @@ void QActive_postLIFO_(QActive * const me, QEvt const * const e) {
 
     QF_CRIT_X_();
 
-    /* LIFO posting to the FreeRTOS queue must succeed */
+    /* LIFO posting to the FreeRTOS queue must succeed, see NOTE3 */
     Q_ALLEGE_ID(610,
         xQueueSendToBack(me->eQueue, (void const *)&e, portMAX_DELAY)
             == pdPASS);
@@ -704,4 +704,13 @@ void *QMPool_getFromISR(QMPool * const me, uint_fast16_t const margin,
 
     return fb; /* return the pointer to memory block or NULL to the caller */
 }
+
+/*============================================================================
+* NOTE3:
+* The event posting to FreeRTOS message queue occurs OUTSIDE critical section,
+* which means that the remaining margin of available slots in the queue
+* cannot be guaranteed. The problem is that interrupts and other tasks can
+* preempt the event posting after checking the margin, but before actually
+* posting the event to the queue.
+*/
 

@@ -23,8 +23,8 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2023-01-07
-* @version Last updated for: @ref qpc_7_2_0
+* @date Last updated on: 2023-04-19
+* @version Last updated for: @ref qpc_7_2_2
 *
 * @file
 * @brief QF/C port to POSIX API (single-threaded, like QV kernel)
@@ -46,8 +46,8 @@
 
 #include <limits.h>       /* for PTHREAD_STACK_MIN */
 #include <sys/mman.h>     /* for mlockall() */
-#include <sys/select.h>
 #include <sys/ioctl.h>
+#include <time.h>         /* for clock_nanosleep() */
 #include <string.h>       /* for memcpy() and memset() */
 #include <stdlib.h>
 #include <stdio.h>
@@ -62,11 +62,12 @@ pthread_cond_t QV_condVar_; /* Cond.var. to signal events */
 
 /* Local objects ===========================================================*/
 static pthread_mutex_t l_pThreadMutex; /* POSIX mutex for critical sections */
-static bool l_isRunning;
+static bool l_isRunning;      /* flag indicating when QF is running */
 static struct termios l_tsav; /* structure with saved terminal attributes */
 static struct timespec l_tick;
 static int_t l_tickPrio;
-enum { NANOSLEEP_NSEC_PER_SEC = 1000000000 }; /* see NOTE05 */
+
+#define NSEC_PER_SEC (1000000000L)
 
 static void *ticker_thread(void *arg);
 static void sigIntHandler(int dummy);
@@ -76,7 +77,7 @@ void QF_init(void) {
     struct sigaction sig_act;
 
     /* lock memory so we're never swapped out to disk */
-    /*mlockall(MCL_CURRENT | MCL_FUTURE);  uncomment when supported */
+    /*mlockall(MCL_CURRENT | MCL_FUTURE);  un-comment when supported */
 
     /* init the global mutex with the default non-recursive initializer */
     pthread_mutex_init(&l_pThreadMutex, NULL);
@@ -85,7 +86,7 @@ void QF_init(void) {
     pthread_cond_init(&QV_condVar_, NULL);
 
     l_tick.tv_sec = 0;
-    l_tick.tv_nsec = NANOSLEEP_NSEC_PER_SEC/100L; /* default clock tick */
+    l_tick.tv_nsec = NSEC_PER_SEC/100L; /* default clock tick */
     l_tickPrio = sched_get_priority_min(SCHED_FIFO); /* default tick prio */
 
     /* install the SIGINT (Ctrl-C) signal handler */
@@ -209,7 +210,7 @@ int_t QF_run(void) {
 /*..........................................................................*/
 void QF_setTickRate(uint32_t ticksPerSec, int_t tickPrio) {
     if (ticksPerSec != 0U) {
-        l_tick.tv_nsec = NANOSLEEP_NSEC_PER_SEC / ticksPerSec;
+        l_tick.tv_nsec = NSEC_PER_SEC / ticksPerSec;
     }
     else {
         l_tick.tv_nsec = 0; /* means NO system clock tick */
@@ -258,9 +259,9 @@ int QF_consoleWaitForKey(void) {
 
 /****************************************************************************/
 void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
-                  QEvt const * * const qSto, uint_fast16_t const qLen,
-                  void * const stkSto, uint_fast16_t const stkSize,
-                  void const * const par)
+                    QEvt const * * const qSto, uint_fast16_t const qLen,
+                    void * const stkSto, uint_fast16_t const stkSize,
+                    void const * const par)
 {
     (void)stkSize; /* unused parameter in the POSIX port */
 
@@ -303,8 +304,25 @@ void QActive_setAttr(QActive *const me, uint32_t attr1, void const *attr2) {
 static void *ticker_thread(void *arg) { /* for pthread_create() */
     (void)arg; /* unused parameter */
     while (l_isRunning) { /* the clock tick loop... */
-        nanosleep(&l_tick, NULL); /* sleep for the number of ticks, NOTE05 */
-        QF_onClockTick(); /* clock tick callback (must call QTIMEEVT_TICK_X()) */
+
+        /* get the absolute monotonic time for no-drift sleeping */
+        struct timespec next_time;
+        clock_gettime(CLOCK_MONOTONIC, &next_time);
+
+        /* advance to the next absolute time */
+        next_time.tv_nsec += l_tick.tv_nsec;
+        if (next_time.tv_nsec >= NSEC_PER_SEC) {
+            next_time.tv_nsec -= NSEC_PER_SEC;
+            next_time.tv_sec  += 1;
+        }
+
+        /* sleep without drifting till next_time (absolute), see NOTE03 */
+        if (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,
+                            &next_time, NULL) == 0) /* success? */
+        {
+            /* clock tick callback (must call QTIMEEVT_TICK_X()) */
+            QF_onClockTick();
+        }
     }
     return (void *)0; /* return success */
 }
@@ -320,19 +338,12 @@ static void sigIntHandler(int dummy) {
 * In Linux, the scheduler policy closest to real-time is the SCHED_FIFO
 * policy, available only with superuser privileges. QF_run() attempts to set
 * this policy as well as to maximize its priority, so that the ticking
-* occurrs in the most timely manner (as close to an interrupt as possible).
+* occurs in the most timely manner (as close to an interrupt as possible).
 * However, setting the SCHED_FIFO policy might fail, most probably due to
 * insufficient privileges.
 *
-* NOTE02:
-* On some Linux systems nanosleep() might actually not deliver the finest
-* time granularity. For example, on some Linux implementations, nanosleep()
-* could not block for shorter intervals than 20ms, while the underlying
-* clock tick period was only 10ms. Sometimes, the select() system call can
-* provide a finer granularity.
-*
 * NOTE03:
-* Any blocking system call, such as nanosleep() or select() system call can
+* Any blocking system call, such as clock_nanosleep() system call can
 * be interrupted by a signal, such as ^C from the keyboard. In this case this
 * QF port breaks out of the event-loop and returns to main() that exits and
 * terminates all spawned p-threads.
@@ -351,10 +362,5 @@ static void sigIntHandler(int dummy) {
 * Assuming that a QF application will be real-time, this port reserves the
 * three highest p-thread priorities for the ISR-like threads (e.g., I/O),
 * and the rest highest-priorities for the active objects.
-*
-* NOTE05:
-* In some (older) Linux kernels, the POSIX nanosleep() system call might
-* deliver only 2*actual-system-tick granularity. To compensate for this,
-* you would need to reduce the constant NANOSLEEP_NSEC_PER_SEC by factor 2.
 */
 
