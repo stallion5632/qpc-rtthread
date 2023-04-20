@@ -23,7 +23,7 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2023-04-19
+* @date Last updated on: 2023-04-20
 * @version Last updated for: @ref qpc_7_2_2
 *
 * @file
@@ -62,12 +62,13 @@ pthread_cond_t QV_condVar_; /* Cond.var. to signal events */
 
 /* Local objects ===========================================================*/
 static pthread_mutex_t l_pThreadMutex; /* POSIX mutex for critical sections */
-static bool l_isRunning;      /* flag indicating when QF is running */
-static struct termios l_tsav; /* structure with saved terminal attributes */
-static struct timespec l_tick;
-static int_t l_tickPrio;
+static bool l_isRunning;       /* flag indicating when QF is running */
+static struct termios l_tsav;  /* structure with saved terminal attributes */
+static struct timespec l_tick; /* structure for the clock tick */
+static int_t l_tickPrio;       /* priority of the ticker thread */
 
-#define NSEC_PER_SEC (1000000000L)
+#define NSEC_PER_SEC           1000000000L
+#define DEFAULT_TICKS_PER_SEC  100
 
 static void *ticker_thread(void *arg);
 static void sigIntHandler(int dummy);
@@ -86,8 +87,8 @@ void QF_init(void) {
     pthread_cond_init(&QV_condVar_, NULL);
 
     l_tick.tv_sec = 0;
-    l_tick.tv_nsec = NSEC_PER_SEC/100L; /* default clock tick */
-    l_tickPrio = sched_get_priority_min(SCHED_FIFO); /* default tick prio */
+    l_tick.tv_nsec = NSEC_PER_SEC / DEFAULT_TICKS_PER_SEC; /* default tick */
+    l_tickPrio = sched_get_priority_min(SCHED_FIFO); /* default ticker prio */
 
     /* install the SIGINT (Ctrl-C) signal handler */
     memset(&sig_act, 0, sizeof(sig_act));
@@ -95,19 +96,17 @@ void QF_init(void) {
     sigaction(SIGINT, &sig_act, NULL);
 }
 
-/****************************************************************************/
+/*..........................................................................*/
 void QF_enterCriticalSection_(void) {
     pthread_mutex_lock(&l_pThreadMutex);
 }
-/****************************************************************************/
+/*..........................................................................*/
 void QF_leaveCriticalSection_(void) {
     pthread_mutex_unlock(&l_pThreadMutex);
 }
 
-/****************************************************************************/
+/*..........................................................................*/
 int_t QF_run(void) {
-    QF_CRIT_STAT_
-
     QF_onStartup();  /* invoke startup callback */
 
     l_isRunning = true; /* QF is running */
@@ -123,7 +122,7 @@ int_t QF_run(void) {
 
         /* SCHED_FIFO corresponds to real-time preemptive priority-based
         * scheduler.
-        * NOTE: This scheduling policy requires the superuser priviledges
+        * NOTE: This scheduling policy requires the superuser privileges
         */
         pthread_attr_setschedpolicy (&attr, SCHED_FIFO);
         pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
@@ -153,6 +152,7 @@ int_t QF_run(void) {
     }
 
     /* the combined event-loop and background-loop of the QV kernel */
+    QF_CRIT_STAT_
     QF_CRIT_E_();
 
     /* produce the QS_QF_RUN trace record */
@@ -257,7 +257,7 @@ int QF_consoleWaitForKey(void) {
     return getchar();
 }
 
-/****************************************************************************/
+/*--------------------------------------------------------------------------*/
 void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
                     QEvt const * * const qSto, uint_fast16_t const qLen,
                     void * const stkSto, uint_fast16_t const stkSize,
@@ -300,25 +300,32 @@ void QActive_setAttr(QActive *const me, uint32_t attr1, void const *attr2) {
     Q_ERROR_ID(900); /* this function should not be called in this QP port */
 }
 
-/****************************************************************************/
+/*--------------------------------------------------------------------------*/
 static void *ticker_thread(void *arg) { /* for pthread_create() */
-    (void)arg; /* unused parameter */
+    Q_UNUSED_PAR(arg);
+
+    /* system clock tick must be configured */
+    Q_REQUIRE_ID(900, l_tick.tv_nsec != 0);
+
+    /* get the absolute monotonic time for no-drift sleeping */
+    static struct timespec next_tick;
+    clock_gettime(CLOCK_MONOTONIC, &next_tick);
+
+    /* round down nanoseconds to the nearest configured period */
+    next_tick.tv_nsec = (next_tick.tv_nsec / l_tick.tv_nsec) * l_tick.tv_nsec;
+
     while (l_isRunning) { /* the clock tick loop... */
 
-        /* get the absolute monotonic time for no-drift sleeping */
-        struct timespec next_time;
-        clock_gettime(CLOCK_MONOTONIC, &next_time);
-
-        /* advance to the next absolute time */
-        next_time.tv_nsec += l_tick.tv_nsec;
-        if (next_time.tv_nsec >= NSEC_PER_SEC) {
-            next_time.tv_nsec -= NSEC_PER_SEC;
-            next_time.tv_sec  += 1;
+        /* advance to the next tick (absolute time) */
+        next_tick.tv_nsec += l_tick.tv_nsec;
+        if (next_tick.tv_nsec >= NSEC_PER_SEC) {
+            next_tick.tv_nsec -= NSEC_PER_SEC;
+            next_tick.tv_sec  += 1;
         }
 
-        /* sleep without drifting till next_time (absolute), see NOTE03 */
+        /* sleep without drifting till next_tick (absolute), see NOTE03 */
         if (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,
-                            &next_time, NULL) == 0) /* success? */
+                            &next_tick, NULL) == 0) /* success? */
         {
             /* clock tick callback (must call QTIMEEVT_TICK_X()) */
             QF_onClockTick();
