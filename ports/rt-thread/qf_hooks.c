@@ -20,4 +20,5 @@ void QF_onCleanup(void) {
 
 void Q_onAssert(char const * const module, int loc) {
     rt_assert_handler(module, "", loc);
+    while(1);
 }
