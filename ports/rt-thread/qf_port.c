@@ -99,7 +99,7 @@ void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
             &me->thread, /* RT-Thread thread control block */
             me->thread.name, /* unique thread name */
             &thread_function, /* thread function */
-            (ULONG)me, /* thread parameter */
+            me, /* thread parameter */
             stkSto,    /* stack start */
             stkSize,   /* stack size in bytes */
             QF_MAX_ACTIVE - me->prio,   /* RT-Thread priority */

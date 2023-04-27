@@ -8,6 +8,7 @@ src     = Split("""
 ./src/qf/qf_act.c
 ./src/qf/qf_defer.c
 ./src/qf/qf_dyn.c
+./src/qf/qf_mem.c
 ./src/qf/qf_ps.c
 ./src/qf/qf_qact.c
 ./src/qf/qf_qeq.c

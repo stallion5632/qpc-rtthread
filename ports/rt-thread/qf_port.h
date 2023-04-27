@@ -49,12 +49,10 @@ enum RT_Thread_ThreadAttrs {
 
 #include <rtthread.h>   /* RT-Thread API */
 
-#include "qep_port.h"  /* QEP port */
-#include "qequeue.h"   /* used for event deferral */
-#include "qf.h"        /* QF platform-independent public interface */
-#ifdef Q_SPY
-#include "qmpool.h"    /* needed only for QS-RX */
-#endif
+#include "qep_port.h" /* QEP port */
+#include "qequeue.h"  /* native QF event queue for deferring events */
+#include "qmpool.h"   /* native QF event pool */
+#include "qf.h"       /* QF platform-independent public interface */
 
 /*****************************************************************************
 * interface used only inside QF, but not in applications
@@ -65,26 +63,15 @@ enum RT_Thread_ThreadAttrs {
     #define QF_SCHED_LOCK_(prio_)   rt_enter_critical()
     #define QF_SCHED_UNLOCK_()      rt_exit_critical()
 
-    /* TreadX block pool operations... */
-    #define QF_EPOOL_TYPE_              struct rt_mempool
-    #define QF_EPOOL_INIT_(pool_, poolSto_, poolSize_, evtSize_)            \
-        Q_ALLEGE(rt_mp_init(&(pool_), (char *)"QP",                         \
-                 (poolSto_), (poolSize_), (evtSize_)) == RT_EOK)
-
-    #define QF_EPOOL_EVENT_SIZE_(pool_)                                     \
-        ((uint_fast16_t)(pool_).block_size)
-
-    #define QF_EPOOL_GET_(pool_, e_, margin_, qs_id_) do {                  \
-        if ((pool_).block_free_count > (margin_)) {                         \
-            e_ = rt_mp_alloc(&(pool_), RT_WAITING_NO);                      \
-        }                                                                   \
-        else {                                                              \
-            (e_) = (QEvt *)0;                                               \
-        }                                                                   \
-    } while (false)
-
-    #define QF_EPOOL_PUT_(dummy, e_, qs_id_)                                \
-        rt_mp_free((void *)(e_));
+    /* native QF event pool operations */
+    #define QF_EPOOL_TYPE_            QMPool
+    #define QF_EPOOL_INIT_(p_, poolSto_, poolSize_, evtSize_) \
+        (QMPool_init(&(p_), (poolSto_), (poolSize_), (evtSize_)))
+    #define QF_EPOOL_EVENT_SIZE_(p_)  ((uint_fast16_t)(p_).blockSize)
+    #define QF_EPOOL_GET_(p_, e_, m_, qs_id_) \
+        ((e_) = (QEvt *)QMPool_get(&(p_), (m_), (qs_id_)))
+    #define QF_EPOOL_PUT_(p_, e_, qs_id_) \
+        (QMPool_put(&(p_), (e_), (qs_id_)))
 
 #endif /* ifdef QP_IMPL */
 
