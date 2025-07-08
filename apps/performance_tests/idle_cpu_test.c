@@ -93,6 +93,7 @@ static void idle_monitor_thread_func(void *parameter) {
         if (last_time != 0) {
             uint32_t time_delta = current_time - last_time;
             uint32_t idle_delta = current_idle_count - last_idle_count;
+            (void)time_delta; /* suppress unused variable warning */
             
             /* Send idle measurement event */
             IdleCpuEvt *evt = Q_NEW(IdleCpuEvt, IDLE_CPU_MEASURE_SIG);
