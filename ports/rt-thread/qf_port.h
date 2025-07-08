@@ -43,6 +43,22 @@
 #define QF_CRIT_ENTRY(stat_)  (rt_enter_critical())
 #define QF_CRIT_EXIT(stat_)   (rt_exit_critical())
 
+/* Enable QEvt target extension for fast-path dispatch */
+#define Q_EVT_TARGET
+
+/* QF optimization layer configuration */
+#ifndef QF_STAGING_BUFFER_SIZE
+#define QF_STAGING_BUFFER_SIZE 32U  /*!< Configurable staging buffer size */
+#endif
+
+#ifndef QF_DISPATCHER_STACK_SIZE
+#define QF_DISPATCHER_STACK_SIZE 2048U  /*!< Configurable dispatcher stack size */
+#endif
+
+#ifndef QF_DISPATCHER_PRIORITY
+#define QF_DISPATCHER_PRIORITY 0U  /*!< Highest priority for dispatcher */
+#endif
+
 enum RT_Thread_ThreadAttrs {
     THREAD_NAME_ATTR
 };
@@ -53,6 +69,7 @@ enum RT_Thread_ThreadAttrs {
 #include "qequeue.h"  /* native QF event queue for deferring events */
 #include "qmpool.h"   /* native QF event pool */
 #include "qf.h"       /* QF platform-independent public interface */
+#include "qf_opt_layer.h" /* QF optimization layer */
 
 /*****************************************************************************
 * interface used only inside QF, but not in applications

@@ -17,6 +17,7 @@ src     = Split("""
 ./include/qstamp.c
 ./ports/rt-thread/qf_hooks.c
 ./ports/rt-thread/qf_port.c
+./ports/rt-thread/qf_opt_layer.c
 """)
 
 if GetDepend(['QPC_USING_BLINKY_EXAMPLE']):
