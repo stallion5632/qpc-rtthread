@@ -46,14 +46,38 @@ volatile uint32_t g_jitter_measurements = 0;
 volatile uint32_t g_memory_measurements = 0;
 
 /*==========================================================================*/
+/* Configurable Event Pool Sizes */
+/*==========================================================================*/
+
+#ifndef QPC_PERF_LATENCY_POOL_SIZE
+#define QPC_PERF_LATENCY_POOL_SIZE      10
+#endif
+
+#ifndef QPC_PERF_THROUGHPUT_POOL_SIZE
+#define QPC_PERF_THROUGHPUT_POOL_SIZE   20
+#endif
+
+#ifndef QPC_PERF_JITTER_POOL_SIZE
+#define QPC_PERF_JITTER_POOL_SIZE       15
+#endif
+
+#ifndef QPC_PERF_IDLE_CPU_POOL_SIZE
+#define QPC_PERF_IDLE_CPU_POOL_SIZE     10
+#endif
+
+#ifndef QPC_PERF_MEMORY_POOL_SIZE
+#define QPC_PERF_MEMORY_POOL_SIZE       15
+#endif
+
+/*==========================================================================*/
 /* Static Event Pools for Performance Tests */
 /*==========================================================================*/
 
-static QF_MPOOL_EL(LatencyEvt) l_latencyPool[10];
-static QF_MPOOL_EL(ThroughputEvt) l_throughputPool[20];
-static QF_MPOOL_EL(JitterEvt) l_jitterPool[15];
-static QF_MPOOL_EL(IdleCpuEvt) l_idleCpuPool[10];
-static QF_MPOOL_EL(MemoryEvt) l_memoryPool[15];
+static QF_MPOOL_EL(LatencyEvt) l_latencyPool[QPC_PERF_LATENCY_POOL_SIZE];
+static QF_MPOOL_EL(ThroughputEvt) l_throughputPool[QPC_PERF_THROUGHPUT_POOL_SIZE];
+static QF_MPOOL_EL(JitterEvt) l_jitterPool[QPC_PERF_JITTER_POOL_SIZE];
+static QF_MPOOL_EL(IdleCpuEvt) l_idleCpuPool[QPC_PERF_IDLE_CPU_POOL_SIZE];
+static QF_MPOOL_EL(MemoryEvt) l_memoryPool[QPC_PERF_MEMORY_POOL_SIZE];
 
 /*==========================================================================*/
 /* DWT Cycle Counter Functions */
