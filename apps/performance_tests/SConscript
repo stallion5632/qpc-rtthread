@@ -1,0 +1,26 @@
+import rtconfig
+from building import *
+
+cwd = GetCurrentDir()
+
+# Performance test source files
+src = Split("""
+perf_common.c
+latency_test.c
+throughput_test.c
+jitter_test.c
+idle_cpu_test.c
+memory_test.c
+perf_test_suite.c
+""")
+
+# Include paths
+path = [cwd]
+
+# Define the performance test group
+# This group depends on QPC and RT-Thread mailbox support
+group = DefineGroup('qpc_perf_tests', src, 
+                   depend = ['PKG_USING_QPC', 'RT_USING_MAILBOX', 'RT_USING_FINSH'], 
+                   CPPPATH = path)
+
+Return('group')

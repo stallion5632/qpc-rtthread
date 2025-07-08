@@ -69,6 +69,9 @@ void QF_stop(void) {
 static void thread_function(void *parameter) { /* RT-Thread signature */
     QActive *act = (QActive *)parameter;
 
+    rt_kprintf("[thread_function] AO thread started: %p, name: %s, prio: %d, stat: %d\n",
+               act, rt_thread_self()->name, rt_thread_self()->current_priority, rt_thread_self()->stat);
+
     /* event-loop */
     for (;;) { /* for-ever */
         QEvt const *e = QActive_get_(act);
@@ -94,9 +97,10 @@ void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
     me->prio  = (uint8_t)(prioSpec & 0xFFU); /* QF-priority */
     me->pthre = (uint8_t)(prioSpec >> 8U); /* preemption-threshold */
     QActive_register_(me); /* register this AO */
-
     QHSM_INIT(&me->super, par, me->prio); /* initial tran. (virtual) */
     QS_FLUSH(); /* flush the trace buffer to the host */
+    rt_kprintf("[QActive_start_] AO: %p, name: %s, registered, QHSM: %p\n",
+        me, me->thread.name ? me->thread.name : "NULL", me);
 
     Q_ALLEGE_ID(220,
         rt_thread_init(
@@ -109,13 +113,16 @@ void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
             QF_MAX_ACTIVE - me->prio,   /* RT-Thread priority */
             5)
         == RT_EOK);
-    rt_thread_startup(&me->thread);
+    rt_err_t startup_result = rt_thread_startup(&me->thread);
+    rt_kprintf("[QActive_start_] Thread startup result: %d, state: %d\n", startup_result, me->thread.stat);
 }
 /*..........................................................................*/
 void QActive_setAttr(QActive *const me, uint32_t attr1, void const *attr2) {
     /* this function must be called before QACTIVE_START(),
-    */
-    Q_REQUIRE_ID(300, me->thread.name == (char *)0);
+     * For RT-Thread, thread.name is a char array, not a pointer.
+     * if first byte is 0, thread name has not been set.
+     */
+    Q_REQUIRE_ID(300, me->thread.name[0] == '\0');
     switch (attr1) {
         case THREAD_NAME_ATTR:
             rt_memset(me->thread.name, 0x00, RT_NAME_MAX);
@@ -140,7 +147,7 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
             QS_OBJ_PRE_(me);
             QS_STR_PRE_("FAST_PATH");
         QS_END_NOCRIT_PRE_()
-        
+
         /* Fast-path dispatch - direct call to state machine */
         QHSM_DISPATCH(&me->super, e, me->prio);
         return true;
@@ -175,27 +182,43 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
     }
 
     if (status) { /* can post the event? */
+        /* Check if eligible for fast-path dispatch */
+        if ((e->poolId_ == 0U) && QF_isEligibleForFastPath(me, e)) {
+            QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, me->prio)
+                QS_TIME_PRE_();       /* timestamp */
+                QS_OBJ_PRE_(sender);  /* the sender object */
+                QS_SIG_PRE_(e->sig);  /* the signal of the event */
+                QS_OBJ_PRE_(me);      /* this active object (recipient) */
+                QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
+                QS_EQC_PRE_(nFree);   /* # free entries available */
+                QS_EQC_PRE_(0U);      /* min # free entries (unknown) */
+            QS_END_NOCRIT_PRE_()
 
-        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, me->prio)
-            QS_TIME_PRE_();       /* timestamp */
-            QS_OBJ_PRE_(sender);  /* the sender object */
-            QS_SIG_PRE_(e->sig);  /* the signal of the event */
-            QS_OBJ_PRE_(me);      /* this active object (recipient) */
-            QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
-            QS_EQC_PRE_(nFree);   /* # free entries available */
-            QS_EQC_PRE_(0U);      /* min # free entries (unknown) */
-        QS_END_NOCRIT_PRE_()
+            if (e->poolId_ != 0U) { /* is it a pool event? */
+                QEvt_refCtr_inc_(e); /* increment the reference counter */
+            }
 
-        if (e->poolId_ != 0U) { /* is it a pool event? */
-            QEvt_refCtr_inc_(e); /* increment the reference counter */
+            QF_CRIT_X_();
+
+            /* posting to the RT-Thread message queue must succeed */
+            Q_ALLEGE_ID(520,
+                rt_mb_send(&me->eQueue, (rt_ubase_t)e)
+                == RT_EOK);
         }
+        else {
 
-        QF_CRIT_X_();
+            QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST_ATTEMPT, me->prio)
+                QS_TIME_PRE_();       /* timestamp */
+                QS_OBJ_PRE_(sender);  /* the sender object */
+                QS_SIG_PRE_(e->sig);  /* the signal of the event */
+                QS_OBJ_PRE_(me);      /* this active object (recipient) */
+                QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
+                QS_EQC_PRE_(nFree);   /* # free entries available */
+                QS_EQC_PRE_(0U);      /* min # free entries (unknown) */
+            QS_END_NOCRIT_PRE_()
 
-        /* posting to the RT-Thread message queue must succeed */
-        Q_ALLEGE_ID(520,
-            rt_mb_send(&me->eQueue, (rt_ubase_t)e)
-            == RT_EOK);
+            QF_CRIT_X_();
+        }
     }
     else {
 
