@@ -35,6 +35,13 @@
 #include <stdint.h>  /* Exact-width types. WG14/N843 C99 Standard */
 #include <stdbool.h> /* Boolean type.      WG14/N843 C99 Standard */
 
+/* Platform-specific QEvt extension */
+#ifdef Q_EVT_TARGET
+/*! QEvt extension for RT-Thread optimization layer */
+#define Q_EVT_EXTENSION \
+    void *target; /*!< Target AO pointer for fast-path dispatch */
+#endif
+
 #include "qep.h"     /* QEP platform-independent public interface */
 
 #endif /* QEP_PORT_H */

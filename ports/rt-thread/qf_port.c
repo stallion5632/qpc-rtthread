@@ -33,6 +33,7 @@
 #include "qf_port.h"      /* QF port */
 #include "qf_pkg.h"
 #include "qassert.h"
+#include "qf_opt_layer.h" /* QF optimization layer */
 #ifdef Q_SPY              /* QS software tracing enabled? */
     #include "qs_port.h"  /* QS port */
     #include "qs_pkg.h"   /* QS package-scope internal interface */
@@ -50,6 +51,9 @@ int_t QF_run(void) {
     QS_CRIT_STAT_
 
     QF_onStartup();  /* QF callback to configure and start interrupts */
+
+    /* Initialize the optimization layer */
+    QF_initOptLayer();
 
     /* produce the QS_QF_RUN trace record */
     QS_BEGIN_PRE_(QS_QF_RUN, 0U)
@@ -127,6 +131,29 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
     uint_fast16_t nFree;
     bool status;
     QF_CRIT_STAT_
+
+    /* Check if eligible for fast-path dispatch */
+    if (QF_isEligibleForFastPath(me, e)) {
+        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, me->prio)
+            QS_TIME_PRE_();
+            QS_SIG_PRE_(e->sig);
+            QS_OBJ_PRE_(me);
+            QS_STR_PRE_("FAST_PATH");
+        QS_END_NOCRIT_PRE_()
+        
+        /* Fast-path dispatch - direct call to state machine */
+        QHSM_DISPATCH(&me->super, e, me->prio);
+        return true;
+    }
+
+    /* Try zero-copy post if margin allows it */
+    if (margin == QF_NO_MARGIN) {
+        /* For critical events, try zero-copy post first */
+        if (QF_zeroCopyPost(me, e)) {
+            return true;
+        }
+        /* If zero-copy failed, fall back to normal mailbox */
+    }
 
     QF_CRIT_E_();
     nFree = (uint_fast16_t)(me->eQueue.size - me->eQueue.entry);
