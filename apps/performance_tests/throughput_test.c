@@ -514,10 +514,6 @@ void ThroughputTest_stop(void) {
     /* Give time for stop signals to be processed */
     rt_thread_mdelay(100);
     
-    /* Stop the Active Objects */
-    QActive_stop(&l_producerAO.super);
-    QActive_stop(&l_consumerAO.super);
-    
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_producerAO.super, THROUGHPUT_START_SIG);
     QActive_unsubscribe(&l_producerAO.super, THROUGHPUT_STOP_SIG);

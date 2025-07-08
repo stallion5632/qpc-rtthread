@@ -311,9 +311,6 @@ void LatencyTest_stop(void) {
     /* Give time for stop signal to be processed */
     rt_thread_mdelay(100);
     
-    /* Stop the Active Object */
-    QActive_stop(&l_latencyAO.super);
-    
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_START_SIG);
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_END_SIG);

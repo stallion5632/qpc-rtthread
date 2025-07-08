@@ -421,9 +421,6 @@ void IdleCpuTest_stop(void) {
     /* Give time for stop signal to be processed */
     rt_thread_mdelay(200);
     
-    /* Stop the Active Object */
-    QActive_stop(&l_idleCpuAO.super);
-    
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_idleCpuAO.super, IDLE_CPU_START_SIG);
     QActive_unsubscribe(&l_idleCpuAO.super, IDLE_CPU_STOP_SIG);

@@ -433,9 +433,6 @@ void JitterTest_stop(void) {
     /* Give time for stop signal to be processed */
     rt_thread_mdelay(100);
     
-    /* Stop the Active Object */
-    QActive_stop(&l_jitterAO.super);
-    
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_jitterAO.super, JITTER_START_SIG);
     QActive_unsubscribe(&l_jitterAO.super, JITTER_STOP_SIG);
