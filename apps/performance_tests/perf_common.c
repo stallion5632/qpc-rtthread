@@ -48,23 +48,23 @@ volatile uint32_t g_memory_measurements = 0;
 /*==========================================================================*/
 
 #ifndef QPC_PERF_LATENCY_POOL_SIZE
-#define QPC_PERF_LATENCY_POOL_SIZE      50
+#define QPC_PERF_LATENCY_POOL_SIZE      20  /* Reduced from 50 for embedded */
 #endif
 
 #ifndef QPC_PERF_THROUGHPUT_POOL_SIZE
-#define QPC_PERF_THROUGHPUT_POOL_SIZE   100
+#define QPC_PERF_THROUGHPUT_POOL_SIZE   30  /* Reduced from 100 for embedded */
 #endif
 
 #ifndef QPC_PERF_JITTER_POOL_SIZE
-#define QPC_PERF_JITTER_POOL_SIZE       60
+#define QPC_PERF_JITTER_POOL_SIZE       20  /* Reduced from 60 for embedded */
 #endif
 
 #ifndef QPC_PERF_IDLE_CPU_POOL_SIZE
-#define QPC_PERF_IDLE_CPU_POOL_SIZE     40
+#define QPC_PERF_IDLE_CPU_POOL_SIZE     15  /* Reduced from 40 for embedded */
 #endif
 
 #ifndef QPC_PERF_MEMORY_POOL_SIZE
-#define QPC_PERF_MEMORY_POOL_SIZE       50
+#define QPC_PERF_MEMORY_POOL_SIZE       20  /* Reduced from 50 for embedded */
 #endif
 
 /*==========================================================================*/

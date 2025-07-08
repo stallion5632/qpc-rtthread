@@ -250,12 +250,23 @@ static QState LatencyAO_testing(LatencyAO * const me, QEvt const * const e) {
 }
 
 /*==========================================================================*/
+/* Latency Test Static Variables - Persistent for RT-Thread integration */
+/*==========================================================================*/
+
+static QEvt const *latency_queueSto[10];
+static uint8_t latency_stack[1024];  /* Reduced stack size for embedded */
+static rt_bool_t test_running = RT_FALSE;
+
+/*==========================================================================*/
 /* Latency Test Public Functions */
 /*==========================================================================*/
 
 void LatencyTest_start(void) {
-    static QEvt const *latency_queueSto[10];
-    static uint8_t latency_stack[2048];
+    /* Prevent multiple simultaneous test instances */
+    if (test_running) {
+        rt_kprintf("Latency test already running\n");
+        return;
+    }
     
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
@@ -263,7 +274,7 @@ void LatencyTest_start(void) {
     /* Initialize only the latency event pool */
     PerfCommon_initLatencyPool();
     
-    /* Initialize QF */
+    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
     QF_init();
     
     /* Construct the latency AO */
@@ -276,16 +287,32 @@ void LatencyTest_start(void) {
                   latency_stack, sizeof(latency_stack),
                   (void *)0);
     
+    /* Initialize QF framework (returns immediately in RT-Thread) */
+    QF_run();
+    
+    /* Mark test as running */
+    test_running = RT_TRUE;
+    
     /* Send start signal */
     QACTIVE_POST(&l_latencyAO.super, Q_NEW(QEvt, LATENCY_START_SIG), &l_latencyAO);
     
-    /* Run the test */
-    QF_run();
+    rt_kprintf("Latency test started successfully\n");
 }
 
 void LatencyTest_stop(void) {
+    if (!test_running) {
+        rt_kprintf("Latency test not running\n");
+        return;
+    }
+    
     /* Send stop signal */
     QACTIVE_POST(&l_latencyAO.super, Q_NEW(QEvt, LATENCY_STOP_SIG), &l_latencyAO);
+    
+    /* Give time for stop signal to be processed */
+    rt_thread_mdelay(100);
+    
+    /* Stop the Active Object */
+    QActive_stop(&l_latencyAO.super);
     
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_START_SIG);
@@ -293,11 +320,16 @@ void LatencyTest_stop(void) {
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_MEASURE_SIG);
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_STOP_SIG);
     
+    /* Mark test as stopped */
+    test_running = RT_FALSE;
+    
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
     
     /* Print final results */
     PerfCommon_printResults("Latency", g_latency_measurements);
+    
+    rt_kprintf("Latency test stopped successfully\n");
 }
 
 /* RT-Thread MSH command exports */

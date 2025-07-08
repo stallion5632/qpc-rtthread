@@ -199,11 +199,11 @@ static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e) {
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
             
-            /* Create idle monitor thread */
+            /* Create idle monitor thread with smaller stack for embedded */
             idle_monitor_thread = rt_thread_create("idle_mon",
                                                   idle_monitor_thread_func,
                                                   RT_NULL,
-                                                  2048,
+                                                  1024,  /* Reduced from 2048 */
                                                   LOAD_THREAD_PRIO,
                                                   20);
             if (idle_monitor_thread != RT_NULL) {
@@ -360,12 +360,23 @@ void rt_hw_idle_hook(void) {
 }
 
 /*==========================================================================*/
+/* Idle CPU Test Static Variables - Persistent for RT-Thread integration */
+/*==========================================================================*/
+
+static QEvt const *idle_cpu_queueSto[10];    /* Reduced queue size */
+static uint8_t idle_cpu_stack[1024];         /* Reduced stack size for embedded */
+static rt_bool_t idle_cpu_test_running = RT_FALSE;
+
+/*==========================================================================*/
 /* Idle CPU Test Public Functions */
 /*==========================================================================*/
 
 void IdleCpuTest_start(void) {
-    static QEvt const *idle_cpu_queueSto[15];
-    static uint8_t idle_cpu_stack[2048];
+    /* Prevent multiple simultaneous test instances */
+    if (idle_cpu_test_running) {
+        rt_kprintf("Idle CPU test already running\n");
+        return;
+    }
     
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
@@ -373,7 +384,7 @@ void IdleCpuTest_start(void) {
     /* Initialize only the idle CPU event pool */
     PerfCommon_initIdleCpuPool();
     
-    /* Initialize QF */
+    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
     QF_init();
     
     /* Construct the idle CPU AO */
@@ -386,26 +397,47 @@ void IdleCpuTest_start(void) {
                   idle_cpu_stack, sizeof(idle_cpu_stack),
                   (void *)0);
     
+    /* Initialize QF framework (returns immediately in RT-Thread) */
+    QF_run();
+    
+    /* Mark test as running */
+    idle_cpu_test_running = RT_TRUE;
+    
     /* Send start signal */
     QACTIVE_POST(&l_idleCpuAO.super, Q_NEW(QEvt, IDLE_CPU_START_SIG), &l_idleCpuAO);
     
-    /* Run the test */
-    QF_run();
+    rt_kprintf("Idle CPU test started successfully\n");
 }
 
 void IdleCpuTest_stop(void) {
+    if (!idle_cpu_test_running) {
+        rt_kprintf("Idle CPU test not running\n");
+        return;
+    }
+    
     /* Send stop signal */
     QACTIVE_POST(&l_idleCpuAO.super, Q_NEW(QEvt, IDLE_CPU_STOP_SIG), &l_idleCpuAO);
+    
+    /* Give time for stop signal to be processed */
+    rt_thread_mdelay(200);
+    
+    /* Stop the Active Object */
+    QActive_stop(&l_idleCpuAO.super);
     
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_idleCpuAO.super, IDLE_CPU_START_SIG);
     QActive_unsubscribe(&l_idleCpuAO.super, IDLE_CPU_STOP_SIG);
+    
+    /* Mark test as stopped */
+    idle_cpu_test_running = RT_FALSE;
     
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
     
     /* Print final results */
     PerfCommon_printResults("Idle CPU", g_idle_count);
+    
+    rt_kprintf("Idle CPU test stopped successfully\n");
 }
 
 /* RT-Thread MSH command exports */
