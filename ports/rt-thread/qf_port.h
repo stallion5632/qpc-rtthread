@@ -23,8 +23,8 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2024-02-27
-* @version Last updated for: @ref qpc_7_3_4
+* @date Last updated on: 2022-06-12
+* @version Last updated for: @ref qpc_7_0_1
 *
 * @file
 * @brief QF/C, port to RT-Thread
