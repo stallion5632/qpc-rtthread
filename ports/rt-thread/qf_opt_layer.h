@@ -23,25 +23,44 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2023-01-07
-* @version Last updated for: @ref qpc_7_2_0
+* @date Last updated on: 2024-01-08
+* @version Last updated for: @ref qpc_7_3_0
 *
 * @file
-* @brief QEP/C port, generic C99 compiler
+* @brief QF/C optimization layer for RT-Thread - header file
 */
-#ifndef QEP_PORT_H
-#define QEP_PORT_H
+#ifndef QF_OPT_LAYER_H_
+#define QF_OPT_LAYER_H_
 
-#include <stdint.h>  /* Exact-width types. WG14/N843 C99 Standard */
-#include <stdbool.h> /* Boolean type.      WG14/N843 C99 Standard */
-
-/* Platform-specific QEvt extension */
+/* Platform-private extension for QEvt */
 #ifdef Q_EVT_TARGET
-/*! QEvt extension for RT-Thread optimization layer */
-#define Q_EVT_EXTENSION \
-    void *target; /*!< Target AO pointer for fast-path dispatch */
+/*! Target pointer for fast-path dispatch
+* @private @memberof QEvt
+*/
+#define QEvt_TARGET_EXTENSION  void *target;
+#else
+#define QEvt_TARGET_EXTENSION
 #endif
 
-#include "qep.h"     /* QEP platform-independent public interface */
+/*! Configuration macro for staging buffer size */
+#ifndef QF_STAGING_BUFFER_SIZE
+#define QF_STAGING_BUFFER_SIZE 32U
+#endif
 
-#endif /* QEP_PORT_H */
+/*! Macro to get thread pointer from QActive */
+#define QF_THREAD_PTR(me_) ((rt_thread_t)&(me_)->thread)
+
+/* Public API */
+/*! Initialize the optimization layer */
+void QF_initOptLayer(void);
+
+/*! Check if AO is eligible for fast-path dispatch */
+bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e);
+
+/*! Zero-copy post using staging buffer */
+bool QF_zeroCopyPost(QActive * const me, QEvt const * const e);
+
+/*! Get lost event count */
+uint32_t QF_getLostEventCount(void);
+
+#endif /* QF_OPT_LAYER_H_ */
