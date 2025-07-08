@@ -97,13 +97,20 @@ static void ThroughputConsumerAO_ctor(void) {
 /*==========================================================================*/
 
 static QState ThroughputProducerAO_initial(ThroughputProducerAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to throughput test signals */
-    QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
-    QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
-    
-    return Q_TRAN(&ThroughputProducerAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to throughput test signals */
+            QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&ThroughputProducerAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState ThroughputProducerAO_idle(ThroughputProducerAO * const me, QEvt const * const e) {
@@ -112,6 +119,21 @@ static QState ThroughputProducerAO_idle(ThroughputProducerAO * const me, QEvt co
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Producer: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -168,6 +190,23 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Producer: Producing state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            g_stopProducer = RT_TRUE;
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -232,13 +271,6 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
             break;
         }
         
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timeEvt);
-            g_stopProducer = RT_TRUE;
-            status = Q_HANDLED();
-            break;
-        }
-        
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
@@ -253,14 +285,21 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
 /*==========================================================================*/
 
 static QState ThroughputConsumerAO_initial(ThroughputConsumerAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to throughput test signals */
-    QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
-    QActive_subscribe(&me->super, THROUGHPUT_RECV_SIG);
-    QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
-    
-    return Q_TRAN(&ThroughputConsumerAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to throughput test signals */
+            QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_RECV_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&ThroughputConsumerAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState ThroughputConsumerAO_idle(ThroughputConsumerAO * const me, QEvt const * const e) {
@@ -269,6 +308,21 @@ static QState ThroughputConsumerAO_idle(ThroughputConsumerAO * const me, QEvt co
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Consumer: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -306,6 +360,21 @@ static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QE
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Consumer: Consuming state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
