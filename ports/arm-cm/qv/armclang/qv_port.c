@@ -24,7 +24,7 @@
 ============================================================================*/
 /*!
 * @date Last updated on: 2023-02-03
-* @version Last updated for: @ref qpc_7_2_2
+* @version Last updated for: @ref qpc_7_3_4
 *
 * @file
 * @brief QV/C port to ARM Cortex-M, ARM-CLANG toolset

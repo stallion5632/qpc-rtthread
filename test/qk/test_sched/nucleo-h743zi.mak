@@ -1,6 +1,6 @@
 ##############################################################################
 # Product: Makefile for QP/C on NUCLEO-H743ZI board, QUTEST, GNU-ARM
-# Last Updated for Version: 7.2.2
+# Last Updated for Version: 7.3.4
 # Date of the Last Update:  2023-02-02
 #
 #                    Q u a n t u m  L e a P s

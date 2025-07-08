@@ -1,6 +1,6 @@
 /*****************************************************************************
 * Product: QHsmTst Example
-* Last updated for: @ref qpc_7_2_2
+* Last updated for: @ref qpc_7_3_4
 * Last updated on: 2023-02-13
 *
 *                    Q u a n t u m  L e a P s

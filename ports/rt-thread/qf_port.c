@@ -24,7 +24,7 @@
 ============================================================================*/
 /*!
 * @date Last updated on: 2023-04-12
-* @version Last updated for: @ref qpc_7_2_2
+* @version Last updated for: @ref qpc_7_3_4
 *
 * @file
 * @brief QF/C, port to RT-Thread

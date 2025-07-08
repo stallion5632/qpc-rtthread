@@ -1,6 +1,6 @@
 /*============================================================================
 * Product: BSP for system-testing of QK kernel, NUCLEO-C031C6 board
-* Last updated for version 7.2.2
+* Last updated for version 7.3.4
 * Last updated on  2023-02-02
 *
 *                    Q u a n t u m  L e a P s

@@ -1,6 +1,6 @@
 ##############################################################################
 # Product: Makefile for QEP/C for Windows and POSIX *HOSTS*
-# Last updated for version 7.2.2
+# Last updated for version 7.3.4
 # Last updated on  2023-02-13
 #
 #                    Q u a n t u m  L e a P s

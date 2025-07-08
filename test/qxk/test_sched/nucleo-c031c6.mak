@@ -1,6 +1,6 @@
 ##############################################################################
 # Product: Makefile for SYSTEM-Level tests of QP/C on NUCLEO-c031c6, GNU-ARM
-# Last Updated for Version: 7.2.2
+# Last Updated for Version: 7.3.4
 # Date of the Last Update:  2023-02-02
 #
 #                    Q u a n t u m  L e a P s
