@@ -142,13 +142,20 @@ static void cpu_load_thread_func(void *parameter) {
 /*==========================================================================*/
 
 static QState IdleCpuAO_initial(IdleCpuAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to idle CPU test signals */
-    QActive_subscribe(&me->super, IDLE_CPU_START_SIG);
-    QActive_subscribe(&me->super, IDLE_CPU_STOP_SIG);
-    
-    return Q_TRAN(&IdleCpuAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to idle CPU test signals */
+            QActive_subscribe(&me->super, IDLE_CPU_START_SIG);
+            QActive_subscribe(&me->super, IDLE_CPU_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&IdleCpuAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e) {
@@ -157,6 +164,21 @@ static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Idle CPU Test: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -225,6 +247,23 @@ static QState IdleCpuAO_measuring(IdleCpuAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Idle CPU Test: Measuring state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            g_stopLoadThreads = RT_TRUE;
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -299,13 +338,6 @@ static QState IdleCpuAO_measuring(IdleCpuAO * const me, QEvt const * const e) {
             }
             
             status = Q_TRAN(&IdleCpuAO_idle);
-            break;
-        }
-        
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timeEvt);
-            g_stopLoadThreads = RT_TRUE;
-            status = Q_HANDLED();
             break;
         }
         
