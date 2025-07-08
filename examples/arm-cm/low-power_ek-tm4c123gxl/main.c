@@ -1,6 +1,6 @@
 /*****************************************************************************
 * Product: "Blinky Low-Power" example
-* Last updated for version 7.3.4
+* Last updated for version 7.2.2
 * Last updated on  2023-02-16
 *
 *                    Q u a n t u m  L e a P s

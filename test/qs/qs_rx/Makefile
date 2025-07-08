@@ -1,6 +1,6 @@
 ##############################################################################
 # Product: Makefile for Embedded Test (ET) for Windows *HOST*
-# Last Updated for Version: 7.3.4
+# Last Updated for Version: 7.2.2
 # Date of the Last Update:  2023-01-30
 #
 #                    Q u a n t u m  L e a P s

@@ -24,7 +24,7 @@
 ============================================================================*/
 /*!
 * @date Last updated on: 2023-04-20
-* @version Last updated for: @ref qpc_7_3_4
+* @version Last updated for: @ref qpc_7_2_2
 *
 * @file
 * @brief QF/C port to POSIX API (single-threaded, like QV kernel)

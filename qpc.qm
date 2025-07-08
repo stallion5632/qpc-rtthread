@@ -13595,9 +13595,9 @@ $declare1 ${DbC}
 * major version number, Y is a 1-digit minor version number, and Z is
 * a 1-digit release number.
 */
-#define QP_VERSION_STR &quot;7.3.4&quot;
+#define QP_VERSION_STR &quot;7.2.2&quot;
 
-/*! Encrypted  current QP release (7.3.4) and date (2023-03-01) */
+/*! Encrypted  current QP release (7.2.2) and date (2023-03-01) */
 #define QP_RELEASE 0x76BAD85DU
 
 /*==========================================================================*/

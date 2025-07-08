@@ -1,6 +1,6 @@
 ##############################################################################
 # Product: Makefile for QP/C on EK-TM4C123GXL, FreeRTOS-Kernel, GNU-ARM
-# Last Updated for Version: 7.3.4
+# Last Updated for Version: 7.2.2
 # Date of the Last Update:  2023-03-04
 #
 #                    Q u a n t u m  L e a P s
