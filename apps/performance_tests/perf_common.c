@@ -48,23 +48,23 @@ volatile uint32_t g_memory_measurements = 0;
 /*==========================================================================*/
 
 #ifndef QPC_PERF_LATENCY_POOL_SIZE
-#define QPC_PERF_LATENCY_POOL_SIZE      20
+#define QPC_PERF_LATENCY_POOL_SIZE      50
 #endif
 
 #ifndef QPC_PERF_THROUGHPUT_POOL_SIZE
-#define QPC_PERF_THROUGHPUT_POOL_SIZE   40
+#define QPC_PERF_THROUGHPUT_POOL_SIZE   100
 #endif
 
 #ifndef QPC_PERF_JITTER_POOL_SIZE
-#define QPC_PERF_JITTER_POOL_SIZE       30
+#define QPC_PERF_JITTER_POOL_SIZE       60
 #endif
 
 #ifndef QPC_PERF_IDLE_CPU_POOL_SIZE
-#define QPC_PERF_IDLE_CPU_POOL_SIZE     20
+#define QPC_PERF_IDLE_CPU_POOL_SIZE     40
 #endif
 
 #ifndef QPC_PERF_MEMORY_POOL_SIZE
-#define QPC_PERF_MEMORY_POOL_SIZE       25
+#define QPC_PERF_MEMORY_POOL_SIZE       50
 #endif
 
 /*==========================================================================*/
@@ -120,8 +120,7 @@ void PerfCommon_initTest(void) {
     g_stopProducer = RT_FALSE;
     g_stopLoadThreads = RT_FALSE;
     
-    /* Initialize event pools */
-    PerfCommon_initEventPools();
+    /* Note: Event pools are now initialized selectively by each test */
 }
 
 void PerfCommon_cleanupTest(void) {
@@ -157,15 +156,35 @@ void PerfCommon_waitForThreads(void) {
 }
 
 /*==========================================================================*/
-/* Event Pool Management */
+/* Event Pool Management - Selective Initialization */
 /*==========================================================================*/
 
 void PerfCommon_initEventPools(void) {
-    /* Initialize event pools for different test types */
+    /* Initialize all event pools - for compatibility */
+    PerfCommon_initLatencyPool();
+    PerfCommon_initThroughputPool();
+    PerfCommon_initJitterPool();
+    PerfCommon_initIdleCpuPool();
+    PerfCommon_initMemoryPool();
+}
+
+void PerfCommon_initLatencyPool(void) {
     QF_poolInit(l_latencyPool, sizeof(l_latencyPool), sizeof(LatencyEvt));
+}
+
+void PerfCommon_initThroughputPool(void) {
     QF_poolInit(l_throughputPool, sizeof(l_throughputPool), sizeof(ThroughputEvt));
+}
+
+void PerfCommon_initJitterPool(void) {
     QF_poolInit(l_jitterPool, sizeof(l_jitterPool), sizeof(JitterEvt));
+}
+
+void PerfCommon_initIdleCpuPool(void) {
     QF_poolInit(l_idleCpuPool, sizeof(l_idleCpuPool), sizeof(IdleCpuEvt));
+}
+
+void PerfCommon_initMemoryPool(void) {
     QF_poolInit(l_memoryPool, sizeof(l_memoryPool), sizeof(MemoryEvt));
 }
 

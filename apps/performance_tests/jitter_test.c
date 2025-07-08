@@ -382,6 +382,9 @@ void JitterTest_start(void) {
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
+    /* Initialize only the jitter event pool */
+    PerfCommon_initJitterPool();
+    
     /* Initialize QF */
     QF_init();
     

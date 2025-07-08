@@ -454,6 +454,9 @@ void ThroughputTest_start(void) {
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
+    /* Initialize only the throughput event pool */
+    PerfCommon_initThroughputPool();
+    
     /* Initialize QF */
     QF_init();
     

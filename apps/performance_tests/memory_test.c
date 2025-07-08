@@ -454,6 +454,9 @@ void MemoryTest_start(void) {
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
+    /* Initialize only the memory event pool */
+    PerfCommon_initMemoryPool();
+    
     /* Initialize QF */
     QF_init();
     

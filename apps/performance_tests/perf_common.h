@@ -176,8 +176,13 @@ void PerfCommon_printResults(const char *test_name, uint32_t measurements);
 void PerfCommon_setStopFlags(rt_bool_t stop);
 void PerfCommon_waitForThreads(void);
 
-/* Event pool management */
-void PerfCommon_initEventPools(void);
+/* Event pool management - selective initialization */
+void PerfCommon_initEventPools(void);           /* Initialize all pools (legacy) */
+void PerfCommon_initLatencyPool(void);          /* Initialize latency pool only */
+void PerfCommon_initThroughputPool(void);       /* Initialize throughput pool only */
+void PerfCommon_initJitterPool(void);           /* Initialize jitter pool only */
+void PerfCommon_initIdleCpuPool(void);          /* Initialize idle CPU pool only */
+void PerfCommon_initMemoryPool(void);           /* Initialize memory pool only */
 void PerfCommon_cleanupEventPools(void);
 
 /* Memory management utilities */

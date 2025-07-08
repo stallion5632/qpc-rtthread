@@ -260,6 +260,9 @@ void LatencyTest_start(void) {
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
+    /* Initialize only the latency event pool */
+    PerfCommon_initLatencyPool();
+    
     /* Initialize QF */
     QF_init();
     

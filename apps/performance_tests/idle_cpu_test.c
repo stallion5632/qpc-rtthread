@@ -370,6 +370,9 @@ void IdleCpuTest_start(void) {
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
+    /* Initialize only the idle CPU event pool */
+    PerfCommon_initIdleCpuPool();
+    
     /* Initialize QF */
     QF_init();
     
