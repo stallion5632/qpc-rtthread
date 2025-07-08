@@ -134,6 +134,13 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
 
     /* Check if eligible for fast-path dispatch */
     if (QF_isEligibleForFastPath(me, e)) {
+        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, me->prio)
+            QS_TIME_PRE_();
+            QS_SIG_PRE_(e->sig);
+            QS_OBJ_PRE_(me);
+            QS_STR_PRE_("FAST_PATH");
+        QS_END_NOCRIT_PRE_()
+        
         /* Fast-path dispatch - direct call to state machine */
         QHSM_DISPATCH(&me->super, e, me->prio);
         return true;

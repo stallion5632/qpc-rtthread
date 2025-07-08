@@ -48,10 +48,10 @@ Q_DEFINE_THIS_MODULE("qf_opt_layer")
 #endif
 
 /* Static dispatcher stack */
-static uint8_t dispatcherStack[2048] RT_ALIGN_SIZE;
+static uint8_t dispatcherStack[QF_DISPATCHER_STACK_SIZE] RT_ALIGN_SIZE;
 static rt_thread_t dispatcherThreadObj;
 
-/* Staging buffer for fast-path events */
+/* Global optimization layer variables */
 static struct {
     struct {
         QEvt const *evt;
@@ -61,6 +61,7 @@ static struct {
     volatile uint32_t rear;
     rt_sem_t sem;
     uint32_t lostEvtCnt;
+    bool enabled;
 } l_stagingBuffer;
 
 /* Forward declarations */
@@ -69,6 +70,11 @@ static void QF_dispatchBatchedEvents(void);
 
 /*..........................................................................*/
 bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e) {
+    /* Check if optimization layer is enabled */
+    if (!l_stagingBuffer.enabled) {
+        return false;
+    }
+    
     /* Check if the target AO thread is ready for fast dispatch */
     rt_thread_t targetThread = (rt_thread_t)&me->thread;
     
@@ -144,6 +150,7 @@ void QF_initOptLayer(void) {
     l_stagingBuffer.front = 0U;
     l_stagingBuffer.rear = 0U;
     l_stagingBuffer.lostEvtCnt = 0U;
+    l_stagingBuffer.enabled = true;  /* Enable optimization layer by default */
     
     /* Initialize semaphore */
     rt_sem_init(&l_stagingBuffer.sem, "qf_opt_sem", 0, RT_IPC_FLAG_FIFO);
@@ -155,7 +162,7 @@ void QF_initOptLayer(void) {
                    RT_NULL,
                    dispatcherStack,
                    sizeof(dispatcherStack),
-                   0,    /* highest priority */
+                   QF_DISPATCHER_PRIORITY,    /* highest priority */
                    1);   /* no timeslice */
     
     rt_thread_startup(&dispatcherThreadObj);
@@ -196,6 +203,29 @@ static void QF_dispatchBatchedEvents(void) {
 }
 
 /*..........................................................................*/
+bool QF_postFromISR(QActive * const me, QEvt const * const e) {
+    /* Check if eligible for fast-path dispatch */
+    if (QF_isEligibleForFastPath(me, e)) {
+        /* Fast-path dispatch from ISR */
+        QHSM_DISPATCH(&me->super, e, me->prio);
+        return true;
+    }
+    
+    /* Fallback to zero-copy post if fast path not available */
+    return QF_zeroCopyPost(me, e);
+}
+
+/*..........................................................................*/
 uint32_t QF_getLostEventCount(void) {
     return l_stagingBuffer.lostEvtCnt;
+}
+
+/*..........................................................................*/
+void QF_enableOptLayer(void) {
+    l_stagingBuffer.enabled = true;
+}
+
+/*..........................................................................*/
+void QF_disableOptLayer(void) {
+    l_stagingBuffer.enabled = false;
 }

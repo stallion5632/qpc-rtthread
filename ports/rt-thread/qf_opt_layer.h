@@ -60,7 +60,16 @@ bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e);
 /*! Zero-copy post using staging buffer */
 bool QF_zeroCopyPost(QActive * const me, QEvt const * const e);
 
+/*! ISR wrapper for fast-path dispatch */
+bool QF_postFromISR(QActive * const me, QEvt const * const e);
+
 /*! Get lost event count */
 uint32_t QF_getLostEventCount(void);
+
+/*! Enable optimization layer */
+void QF_enableOptLayer(void);
+
+/*! Disable optimization layer */
+void QF_disableOptLayer(void);
 
 #endif /* QF_OPT_LAYER_H_ */

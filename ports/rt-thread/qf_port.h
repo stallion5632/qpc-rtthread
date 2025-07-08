@@ -46,6 +46,19 @@
 /* Enable QEvt target extension for fast-path dispatch */
 #define Q_EVT_TARGET
 
+/* QF optimization layer configuration */
+#ifndef QF_STAGING_BUFFER_SIZE
+#define QF_STAGING_BUFFER_SIZE 32U  /*!< Configurable staging buffer size */
+#endif
+
+#ifndef QF_DISPATCHER_STACK_SIZE
+#define QF_DISPATCHER_STACK_SIZE 2048U  /*!< Configurable dispatcher stack size */
+#endif
+
+#ifndef QF_DISPATCHER_PRIORITY
+#define QF_DISPATCHER_PRIORITY 0U  /*!< Highest priority for dispatcher */
+#endif
+
 enum RT_Thread_ThreadAttrs {
     THREAD_NAME_ATTR
 };
