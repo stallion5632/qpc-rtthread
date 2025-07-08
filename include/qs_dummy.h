@@ -117,6 +117,7 @@
     #define QS_MPC_PRE_(ctr_)           ((void)0)
     #define QS_MPS_PRE_(size_)          ((void)0)
     #define QS_TEC_PRE_(ctr_)           ((void)0)
+    #define QS_STR_PRE_(str_)           ((void)0)
 
     #define QS_CRIT_STAT_
     #define QF_QS_CRIT_ENTRY()          ((void)0)

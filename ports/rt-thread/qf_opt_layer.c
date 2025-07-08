@@ -42,6 +42,9 @@
 
 Q_DEFINE_THIS_MODULE("qf_opt_layer")
 
+/* Prevent unused variable warning */
+static void const * const module_name = &Q_this_module_[0];
+
 /* Configuration macros */
 #ifndef QF_STAGING_BUFFER_SIZE
 #define QF_STAGING_BUFFER_SIZE 32U
