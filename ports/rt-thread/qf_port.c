@@ -146,6 +146,15 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
         return true;
     }
 
+    /* Try zero-copy post if margin allows it */
+    if (margin == QF_NO_MARGIN) {
+        /* For critical events, try zero-copy post first */
+        if (QF_zeroCopyPost(me, e)) {
+            return true;
+        }
+        /* If zero-copy failed, fall back to normal mailbox */
+    }
+
     QF_CRIT_E_();
     nFree = (uint_fast16_t)(me->eQueue.size - me->eQueue.entry);
 

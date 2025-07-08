@@ -42,14 +42,17 @@
 
 Q_DEFINE_THIS_MODULE("qf_opt_layer")
 
+/* Prevent unused variable warning */
+static void const * const module_name = &Q_this_module_[0];
+
 /* Configuration macros */
 #ifndef QF_STAGING_BUFFER_SIZE
 #define QF_STAGING_BUFFER_SIZE 32U
 #endif
 
 /* Static dispatcher stack */
-static uint8_t dispatcherStack[QF_DISPATCHER_STACK_SIZE] RT_ALIGN_SIZE;
-static rt_thread_t dispatcherThreadObj;
+static uint8_t dispatcherStack[QF_DISPATCHER_STACK_SIZE] __attribute__((aligned(RT_ALIGN_SIZE)));
+static struct rt_thread dispatcherThreadObj;
 
 /* Global optimization layer variables */
 static struct {
@@ -59,7 +62,7 @@ static struct {
     } buffer[QF_STAGING_BUFFER_SIZE];
     volatile uint32_t front;
     volatile uint32_t rear;
-    rt_sem_t sem;
+    struct rt_semaphore sem;
     uint32_t lostEvtCnt;
     bool enabled;
 } l_stagingBuffer;
@@ -67,6 +70,7 @@ static struct {
 /* Forward declarations */
 static void dispatcherThread(void *parameter);
 static void QF_dispatchBatchedEvents(void);
+static void QF_idleHook(void);
 
 /*..........................................................................*/
 bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e) {
@@ -146,6 +150,7 @@ bool QF_zeroCopyPost(QActive * const me, QEvt const * const e) {
 
 /*..........................................................................*/
 void QF_initOptLayer(void) {
+    (void)module_name;
     /* Initialize staging buffer */
     l_stagingBuffer.front = 0U;
     l_stagingBuffer.rear = 0U;
@@ -166,6 +171,9 @@ void QF_initOptLayer(void) {
                    1);   /* no timeslice */
     
     rt_thread_startup(&dispatcherThreadObj);
+    
+    /* Set idle hook to check staging buffer */
+    rt_thread_idle_sethook(QF_idleHook);
 }
 
 /*..........................................................................*/
@@ -229,3 +237,28 @@ void QF_enableOptLayer(void) {
 void QF_disableOptLayer(void) {
     l_stagingBuffer.enabled = false;
 }
+
+/*..........................................................................*/
+static void QF_idleHook(void) {
+    /* Only check if optimization layer is enabled */
+    if (!l_stagingBuffer.enabled) {
+        return;
+    }
+    
+    /* Check if staging buffer has pending events (atomic read) */
+    uint32_t front = l_stagingBuffer.front;
+    uint32_t rear = l_stagingBuffer.rear;
+    
+    if (front != rear) {
+        /* There are pending events, signal the dispatcher thread
+         * This ensures that even non-ISR posted events get processed
+         * when the system becomes idle
+         */
+        rt_sem_release(&l_stagingBuffer.sem);
+    }
+}
+
+/* Make sure Q_this_module_ is referenced to avoid unused variable warning */
+#ifdef Q_SPY
+static char const * const QF_this_module = Q_this_module_;
+#endif

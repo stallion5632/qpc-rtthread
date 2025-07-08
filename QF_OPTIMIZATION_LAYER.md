@@ -36,6 +36,10 @@ This implementation addresses all requirements from Pull Request #1 to create a 
 - **D-2**: Configurable QF_STAGING_BUFFER_SIZE with overflow handling and lost event counter
 - **D-3**: Extended fast-path to dynamic events with proper reference counting
 
+### E. Enhanced Responsiveness
+- **E-1**: Idle hook integration to ensure timely processing of staged events
+- **E-2**: Automatic dispatcher triggering when system becomes idle to prevent event starvation
+
 ## Configuration Options
 
 ```c
@@ -92,6 +96,26 @@ uint32_t QF_getLostEventCount(void);                  // Get lost event statisti
 ## Integration
 
 The optimization layer is automatically initialized in QF_run() and integrates seamlessly with existing QActive_post_() calls. No changes to application code are required, but applications can optionally use the new ISR wrapper and configuration APIs for enhanced performance.
+
+### Idle Hook Integration
+The optimization layer includes an idle hook mechanism to ensure timely event processing:
+
+```c
+// Automatically installed in QF_initOptLayer()
+rt_thread_idle_sethook(QF_idleHook);
+```
+
+**Benefits:**
+- Prevents event starvation when non-ISR threads post to staging buffer
+- Ensures events are processed even when system is idle
+- Provides additional safety net for real-time responsiveness
+- Works transparently without requiring application changes
+
+**Implementation Details:**
+- Idle hook checks if staging buffer has pending events
+- Only triggers semaphore release if events are waiting
+- Lightweight implementation suitable for idle context
+- Respects optimization layer enable/disable state
 
 ## Testing
 
