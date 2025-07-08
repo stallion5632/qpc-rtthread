@@ -123,13 +123,20 @@ static void load_thread2_func(void *parameter) {
 /*==========================================================================*/
 
 static QState JitterAO_initial(JitterAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to jitter test signals */
-    QActive_subscribe(&me->super, JITTER_START_SIG);
-    QActive_subscribe(&me->super, JITTER_STOP_SIG);
-    
-    return Q_TRAN(&JitterAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to jitter test signals */
+            QActive_subscribe(&me->super, JITTER_START_SIG);
+            QActive_subscribe(&me->super, JITTER_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&JitterAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState JitterAO_idle(JitterAO * const me, QEvt const * const e) {
@@ -138,6 +145,21 @@ static QState JitterAO_idle(JitterAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Jitter Test: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -210,6 +232,24 @@ static QState JitterAO_measuring(JitterAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Jitter Test: Measuring state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timerEvt);
+            QTimeEvt_disarm(&me->measureEvt);
+            g_stopLoadThreads = RT_TRUE;
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -319,14 +359,6 @@ static QState JitterAO_measuring(JitterAO * const me, QEvt const * const e) {
             }
             
             status = Q_TRAN(&JitterAO_idle);
-            break;
-        }
-        
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timerEvt);
-            QTimeEvt_disarm(&me->measureEvt);
-            g_stopLoadThreads = RT_TRUE;
-            status = Q_HANDLED();
             break;
         }
         
