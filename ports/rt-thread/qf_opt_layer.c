@@ -23,8 +23,8 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2024-01-08
-* @version Last updated for: @ref qpc_7_3_0
+* @date Last updated on: 2024-02-27
+* @version Last updated for: @ref qpc_7_3_4
 *
 * @file
 * @brief QF/C optimization layer for RT-Thread
