@@ -182,13 +182,20 @@ static void memory_test_thread_func(void *parameter) {
 /*==========================================================================*/
 
 static QState MemoryAO_initial(MemoryAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to memory test signals */
-    QActive_subscribe(&me->super, MEMORY_START_SIG);
-    QActive_subscribe(&me->super, MEMORY_STOP_SIG);
-    
-    return Q_TRAN(&MemoryAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to memory test signals */
+            QActive_subscribe(&me->super, MEMORY_START_SIG);
+            QActive_subscribe(&me->super, MEMORY_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&MemoryAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
@@ -197,6 +204,21 @@ static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Memory Test: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -261,6 +283,27 @@ static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Memory Test: Testing state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            g_stopLoadThreads = RT_TRUE;
+            
+            /* Free all tracked allocations */
+            free_all_tracked();
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -388,17 +431,6 @@ static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
             free_all_tracked();
             
             status = Q_TRAN(&MemoryAO_idle);
-            break;
-        }
-        
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timeEvt);
-            g_stopLoadThreads = RT_TRUE;
-            
-            /* Free all tracked allocations */
-            free_all_tracked();
-            
-            status = Q_HANDLED();
             break;
         }
         
