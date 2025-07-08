@@ -150,6 +150,7 @@ bool QF_zeroCopyPost(QActive * const me, QEvt const * const e) {
 
 /*..........................................................................*/
 void QF_initOptLayer(void) {
+    (void)module_name;
     /* Initialize staging buffer */
     l_stagingBuffer.front = 0U;
     l_stagingBuffer.rear = 0U;
