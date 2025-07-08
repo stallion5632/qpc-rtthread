@@ -24,7 +24,7 @@
 ============================================================================*/
 /*!
 * @date Last updated on: 2023-01-07
-* @version Last updated for: @ref qpc_7_2_0
+* @version Last updated for: @ref qpc_7_3_4
 *
 * @file
 * @brief QF/C port to Win32 API (single-threaded, like the QV kernel)
