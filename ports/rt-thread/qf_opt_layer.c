@@ -48,8 +48,8 @@ Q_DEFINE_THIS_MODULE("qf_opt_layer")
 #endif
 
 /* Static dispatcher stack */
-static uint8_t dispatcherStack[QF_DISPATCHER_STACK_SIZE] RT_ALIGN_SIZE;
-static rt_thread_t dispatcherThreadObj;
+static uint8_t dispatcherStack[QF_DISPATCHER_STACK_SIZE] __attribute__((aligned(RT_ALIGN_SIZE)));
+static struct rt_thread dispatcherThreadObj;
 
 /* Global optimization layer variables */
 static struct {
@@ -59,7 +59,7 @@ static struct {
     } buffer[QF_STAGING_BUFFER_SIZE];
     volatile uint32_t front;
     volatile uint32_t rear;
-    rt_sem_t sem;
+    struct rt_semaphore sem;
     uint32_t lostEvtCnt;
     bool enabled;
 } l_stagingBuffer;
@@ -253,3 +253,8 @@ static void QF_idleHook(void) {
         rt_sem_release(&l_stagingBuffer.sem);
     }
 }
+
+/* Make sure Q_this_module_ is referenced to avoid unused variable warning */
+#ifdef Q_SPY
+static char const * const QF_this_module = Q_this_module_;
+#endif
