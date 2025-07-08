@@ -67,6 +67,7 @@ static struct {
 /* Forward declarations */
 static void dispatcherThread(void *parameter);
 static void QF_dispatchBatchedEvents(void);
+static void QF_idleHook(void);
 
 /*..........................................................................*/
 bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e) {
@@ -166,6 +167,9 @@ void QF_initOptLayer(void) {
                    1);   /* no timeslice */
     
     rt_thread_startup(&dispatcherThreadObj);
+    
+    /* Set idle hook to check staging buffer */
+    rt_thread_idle_sethook(QF_idleHook);
 }
 
 /*..........................................................................*/
@@ -228,4 +232,24 @@ void QF_enableOptLayer(void) {
 /*..........................................................................*/
 void QF_disableOptLayer(void) {
     l_stagingBuffer.enabled = false;
+}
+
+/*..........................................................................*/
+static void QF_idleHook(void) {
+    /* Only check if optimization layer is enabled */
+    if (!l_stagingBuffer.enabled) {
+        return;
+    }
+    
+    /* Check if staging buffer has pending events (atomic read) */
+    uint32_t front = l_stagingBuffer.front;
+    uint32_t rear = l_stagingBuffer.rear;
+    
+    if (front != rear) {
+        /* There are pending events, signal the dispatcher thread
+         * This ensures that even non-ISR posted events get processed
+         * when the system becomes idle
+         */
+        rt_sem_release(&l_stagingBuffer.sem);
+    }
 }
