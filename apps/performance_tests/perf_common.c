@@ -28,8 +28,6 @@
 ============================================================================*/
 #include "perf_common.h"
 
-Q_DEFINE_THIS_FILE
-
 /*==========================================================================*/
 /* Global Variables - volatile for atomic visibility */
 /*==========================================================================*/
@@ -46,14 +44,38 @@ volatile uint32_t g_jitter_measurements = 0;
 volatile uint32_t g_memory_measurements = 0;
 
 /*==========================================================================*/
+/* Configurable Event Pool Sizes */
+/*==========================================================================*/
+
+#ifndef QPC_PERF_LATENCY_POOL_SIZE
+#define QPC_PERF_LATENCY_POOL_SIZE      20  /* Reduced from 50 for embedded */
+#endif
+
+#ifndef QPC_PERF_THROUGHPUT_POOL_SIZE
+#define QPC_PERF_THROUGHPUT_POOL_SIZE   30  /* Reduced from 100 for embedded */
+#endif
+
+#ifndef QPC_PERF_JITTER_POOL_SIZE
+#define QPC_PERF_JITTER_POOL_SIZE       20  /* Reduced from 60 for embedded */
+#endif
+
+#ifndef QPC_PERF_IDLE_CPU_POOL_SIZE
+#define QPC_PERF_IDLE_CPU_POOL_SIZE     15  /* Reduced from 40 for embedded */
+#endif
+
+#ifndef QPC_PERF_MEMORY_POOL_SIZE
+#define QPC_PERF_MEMORY_POOL_SIZE       20  /* Reduced from 50 for embedded */
+#endif
+
+/*==========================================================================*/
 /* Static Event Pools for Performance Tests */
 /*==========================================================================*/
 
-static QF_MPOOL_EL(LatencyEvt) l_latencyPool[10];
-static QF_MPOOL_EL(ThroughputEvt) l_throughputPool[20];
-static QF_MPOOL_EL(JitterEvt) l_jitterPool[15];
-static QF_MPOOL_EL(IdleCpuEvt) l_idleCpuPool[10];
-static QF_MPOOL_EL(MemoryEvt) l_memoryPool[15];
+static QF_MPOOL_EL(LatencyEvt) l_latencyPool[QPC_PERF_LATENCY_POOL_SIZE];
+static QF_MPOOL_EL(ThroughputEvt) l_throughputPool[QPC_PERF_THROUGHPUT_POOL_SIZE];
+static QF_MPOOL_EL(JitterEvt) l_jitterPool[QPC_PERF_JITTER_POOL_SIZE];
+static QF_MPOOL_EL(IdleCpuEvt) l_idleCpuPool[QPC_PERF_IDLE_CPU_POOL_SIZE];
+static QF_MPOOL_EL(MemoryEvt) l_memoryPool[QPC_PERF_MEMORY_POOL_SIZE];
 
 /*==========================================================================*/
 /* DWT Cycle Counter Functions */
@@ -98,8 +120,7 @@ void PerfCommon_initTest(void) {
     g_stopProducer = RT_FALSE;
     g_stopLoadThreads = RT_FALSE;
     
-    /* Initialize event pools */
-    PerfCommon_initEventPools();
+    /* Note: Event pools are now initialized selectively by each test */
 }
 
 void PerfCommon_cleanupTest(void) {
@@ -135,15 +156,35 @@ void PerfCommon_waitForThreads(void) {
 }
 
 /*==========================================================================*/
-/* Event Pool Management */
+/* Event Pool Management - Selective Initialization */
 /*==========================================================================*/
 
 void PerfCommon_initEventPools(void) {
-    /* Initialize event pools for different test types */
+    /* Initialize all event pools - for compatibility */
+    PerfCommon_initLatencyPool();
+    PerfCommon_initThroughputPool();
+    PerfCommon_initJitterPool();
+    PerfCommon_initIdleCpuPool();
+    PerfCommon_initMemoryPool();
+}
+
+void PerfCommon_initLatencyPool(void) {
     QF_poolInit(l_latencyPool, sizeof(l_latencyPool), sizeof(LatencyEvt));
+}
+
+void PerfCommon_initThroughputPool(void) {
     QF_poolInit(l_throughputPool, sizeof(l_throughputPool), sizeof(ThroughputEvt));
+}
+
+void PerfCommon_initJitterPool(void) {
     QF_poolInit(l_jitterPool, sizeof(l_jitterPool), sizeof(JitterEvt));
+}
+
+void PerfCommon_initIdleCpuPool(void) {
     QF_poolInit(l_idleCpuPool, sizeof(l_idleCpuPool), sizeof(IdleCpuEvt));
+}
+
+void PerfCommon_initMemoryPool(void) {
     QF_poolInit(l_memoryPool, sizeof(l_memoryPool), sizeof(MemoryEvt));
 }
 

@@ -97,13 +97,20 @@ static void ThroughputConsumerAO_ctor(void) {
 /*==========================================================================*/
 
 static QState ThroughputProducerAO_initial(ThroughputProducerAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to throughput test signals */
-    QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
-    QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
-    
-    return Q_TRAN(&ThroughputProducerAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to throughput test signals */
+            QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&ThroughputProducerAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState ThroughputProducerAO_idle(ThroughputProducerAO * const me, QEvt const * const e) {
@@ -112,6 +119,21 @@ static QState ThroughputProducerAO_idle(ThroughputProducerAO * const me, QEvt co
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Producer: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -132,11 +154,11 @@ static QState ThroughputProducerAO_idle(ThroughputProducerAO * const me, QEvt co
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
             
-            /* Create producer thread */
+            /* Create producer thread with smaller stack for embedded */
             producer_thread = rt_thread_create("producer",
                                                producer_thread_func,
                                                RT_NULL,
-                                               2048,
+                                               1024,  /* Reduced from 2048 */
                                                LOAD_THREAD_PRIO,
                                                20);
             if (producer_thread != RT_NULL) {
@@ -168,6 +190,23 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Producer: Producing state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            g_stopProducer = RT_TRUE;
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -232,13 +271,6 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
             break;
         }
         
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timeEvt);
-            g_stopProducer = RT_TRUE;
-            status = Q_HANDLED();
-            break;
-        }
-        
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
@@ -253,14 +285,21 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
 /*==========================================================================*/
 
 static QState ThroughputConsumerAO_initial(ThroughputConsumerAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to throughput test signals */
-    QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
-    QActive_subscribe(&me->super, THROUGHPUT_RECV_SIG);
-    QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
-    
-    return Q_TRAN(&ThroughputConsumerAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to throughput test signals */
+            QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_RECV_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&ThroughputConsumerAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState ThroughputConsumerAO_idle(ThroughputConsumerAO * const me, QEvt const * const e) {
@@ -269,6 +308,21 @@ static QState ThroughputConsumerAO_idle(ThroughputConsumerAO * const me, QEvt co
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Consumer: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -306,6 +360,21 @@ static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QE
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Consumer: Consuming state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -373,19 +442,33 @@ static void producer_thread_func(void *parameter) {
 }
 
 /*==========================================================================*/
+/* Throughput Test Static Variables - Persistent for RT-Thread integration */
+/*==========================================================================*/
+
+static QEvt const *producer_queueSto[15];    /* Reduced queue sizes */
+static QEvt const *consumer_queueSto[15];
+static uint8_t producer_stack[1024];         /* Reduced stack sizes for embedded */
+static uint8_t consumer_stack[1024];
+static rt_bool_t throughput_test_running = RT_FALSE;
+
+/*==========================================================================*/
 /* Throughput Test Public Functions */
 /*==========================================================================*/
 
 void ThroughputTest_start(void) {
-    static QEvt const *producer_queueSto[20];
-    static QEvt const *consumer_queueSto[20];
-    static uint8_t producer_stack[2048];
-    static uint8_t consumer_stack[2048];
+    /* Prevent multiple simultaneous test instances */
+    if (throughput_test_running) {
+        rt_kprintf("Throughput test already running\n");
+        return;
+    }
     
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
-    /* Initialize QF */
+    /* Initialize only the throughput event pool */
+    PerfCommon_initThroughputPool();
+    
+    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
     QF_init();
     
     /* Construct the AOs */
@@ -405,18 +488,31 @@ void ThroughputTest_start(void) {
                   consumer_stack, sizeof(consumer_stack),
                   (void *)0);
     
+    /* Initialize QF framework (returns immediately in RT-Thread) */
+    QF_run();
+    
+    /* Mark test as running */
+    throughput_test_running = RT_TRUE;
+    
     /* Send start signals */
     QACTIVE_POST(&l_producerAO.super, Q_NEW(QEvt, THROUGHPUT_START_SIG), &l_producerAO);
     QACTIVE_POST(&l_consumerAO.super, Q_NEW(QEvt, THROUGHPUT_START_SIG), &l_consumerAO);
     
-    /* Run the test */
-    QF_run();
+    rt_kprintf("Throughput test started successfully\n");
 }
 
 void ThroughputTest_stop(void) {
+    if (!throughput_test_running) {
+        rt_kprintf("Throughput test not running\n");
+        return;
+    }
+    
     /* Send stop signals */
     QACTIVE_POST(&l_producerAO.super, Q_NEW(QEvt, THROUGHPUT_STOP_SIG), &l_producerAO);
     QACTIVE_POST(&l_consumerAO.super, Q_NEW(QEvt, THROUGHPUT_STOP_SIG), &l_consumerAO);
+    
+    /* Give time for stop signals to be processed */
+    rt_thread_mdelay(100);
     
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_producerAO.super, THROUGHPUT_START_SIG);
@@ -426,11 +522,16 @@ void ThroughputTest_stop(void) {
     QActive_unsubscribe(&l_consumerAO.super, THROUGHPUT_RECV_SIG);
     QActive_unsubscribe(&l_consumerAO.super, THROUGHPUT_STOP_SIG);
     
+    /* Mark test as stopped */
+    throughput_test_running = RT_FALSE;
+    
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
     
     /* Print final results */
     PerfCommon_printResults("Throughput", g_throughput_measurements);
+    
+    rt_kprintf("Throughput test stopped successfully\n");
 }
 
 /* RT-Thread MSH command exports */

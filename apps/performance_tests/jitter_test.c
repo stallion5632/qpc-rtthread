@@ -123,13 +123,20 @@ static void load_thread2_func(void *parameter) {
 /*==========================================================================*/
 
 static QState JitterAO_initial(JitterAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to jitter test signals */
-    QActive_subscribe(&me->super, JITTER_START_SIG);
-    QActive_subscribe(&me->super, JITTER_STOP_SIG);
-    
-    return Q_TRAN(&JitterAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to jitter test signals */
+            QActive_subscribe(&me->super, JITTER_START_SIG);
+            QActive_subscribe(&me->super, JITTER_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&JitterAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState JitterAO_idle(JitterAO * const me, QEvt const * const e) {
@@ -138,6 +145,21 @@ static QState JitterAO_idle(JitterAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Jitter Test: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -210,6 +232,24 @@ static QState JitterAO_measuring(JitterAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Jitter Test: Measuring state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timerEvt);
+            QTimeEvt_disarm(&me->measureEvt);
+            g_stopLoadThreads = RT_TRUE;
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -322,14 +362,6 @@ static QState JitterAO_measuring(JitterAO * const me, QEvt const * const e) {
             break;
         }
         
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timerEvt);
-            QTimeEvt_disarm(&me->measureEvt);
-            g_stopLoadThreads = RT_TRUE;
-            status = Q_HANDLED();
-            break;
-        }
-        
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
@@ -340,17 +372,31 @@ static QState JitterAO_measuring(JitterAO * const me, QEvt const * const e) {
 }
 
 /*==========================================================================*/
+/* Jitter Test Static Variables - Persistent for RT-Thread integration */
+/*==========================================================================*/
+
+static QEvt const *jitter_queueSto[10];      /* Reduced queue size */
+static uint8_t jitter_stack[1024];           /* Reduced stack size for embedded */
+static rt_bool_t jitter_test_running = RT_FALSE;
+
+/*==========================================================================*/
 /* Jitter Test Public Functions */
 /*==========================================================================*/
 
 void JitterTest_start(void) {
-    static QEvt const *jitter_queueSto[15];
-    static uint8_t jitter_stack[2048];
+    /* Prevent multiple simultaneous test instances */
+    if (jitter_test_running) {
+        rt_kprintf("Jitter test already running\n");
+        return;
+    }
     
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
-    /* Initialize QF */
+    /* Initialize only the jitter event pool */
+    PerfCommon_initJitterPool();
+    
+    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
     QF_init();
     
     /* Construct the jitter AO */
@@ -363,26 +409,44 @@ void JitterTest_start(void) {
                   jitter_stack, sizeof(jitter_stack),
                   (void *)0);
     
+    /* Initialize QF framework (returns immediately in RT-Thread) */
+    QF_run();
+    
+    /* Mark test as running */
+    jitter_test_running = RT_TRUE;
+    
     /* Send start signal */
     QACTIVE_POST(&l_jitterAO.super, Q_NEW(QEvt, JITTER_START_SIG), &l_jitterAO);
     
-    /* Run the test */
-    QF_run();
+    rt_kprintf("Jitter test started successfully\n");
 }
 
 void JitterTest_stop(void) {
+    if (!jitter_test_running) {
+        rt_kprintf("Jitter test not running\n");
+        return;
+    }
+    
     /* Send stop signal */
     QACTIVE_POST(&l_jitterAO.super, Q_NEW(QEvt, JITTER_STOP_SIG), &l_jitterAO);
+    
+    /* Give time for stop signal to be processed */
+    rt_thread_mdelay(100);
     
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_jitterAO.super, JITTER_START_SIG);
     QActive_unsubscribe(&l_jitterAO.super, JITTER_STOP_SIG);
+    
+    /* Mark test as stopped */
+    jitter_test_running = RT_FALSE;
     
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
     
     /* Print final results */
     PerfCommon_printResults("Jitter", g_jitter_measurements);
+    
+    rt_kprintf("Jitter test stopped successfully\n");
 }
 
 /* RT-Thread MSH command exports */

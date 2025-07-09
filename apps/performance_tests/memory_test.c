@@ -182,13 +182,20 @@ static void memory_test_thread_func(void *parameter) {
 /*==========================================================================*/
 
 static QState MemoryAO_initial(MemoryAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to memory test signals */
-    QActive_subscribe(&me->super, MEMORY_START_SIG);
-    QActive_subscribe(&me->super, MEMORY_STOP_SIG);
-    
-    return Q_TRAN(&MemoryAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to memory test signals */
+            QActive_subscribe(&me->super, MEMORY_START_SIG);
+            QActive_subscribe(&me->super, MEMORY_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&MemoryAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
@@ -197,6 +204,21 @@ static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Memory Test: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -225,11 +247,11 @@ static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
             
-            /* Create memory test thread */
+            /* Create memory test thread with smaller stack for embedded */
             memory_test_thread = rt_thread_create("mem_test",
                                                  memory_test_thread_func,
                                                  RT_NULL,
-                                                 2048,
+                                                 1024,  /* Reduced from 2048 */
                                                  LOAD_THREAD_PRIO,
                                                  20);
             if (memory_test_thread != RT_NULL) {
@@ -261,6 +283,27 @@ static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Memory Test: Testing state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            g_stopLoadThreads = RT_TRUE;
+            
+            /* Free all tracked allocations */
+            free_all_tracked();
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -391,17 +434,6 @@ static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
             break;
         }
         
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timeEvt);
-            g_stopLoadThreads = RT_TRUE;
-            
-            /* Free all tracked allocations */
-            free_all_tracked();
-            
-            status = Q_HANDLED();
-            break;
-        }
-        
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
@@ -412,17 +444,31 @@ static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
 }
 
 /*==========================================================================*/
+/* Memory Test Static Variables - Persistent for RT-Thread integration */
+/*==========================================================================*/
+
+static QEvt const *memory_queueSto[15];  /* Reduced queue size */
+static uint8_t memory_stack[1024];       /* Reduced stack size for embedded */
+static rt_bool_t memory_test_running = RT_FALSE;
+
+/*==========================================================================*/
 /* Memory Test Public Functions */
 /*==========================================================================*/
 
 void MemoryTest_start(void) {
-    static QEvt const *memory_queueSto[20];
-    static uint8_t memory_stack[2048];
+    /* Prevent multiple simultaneous test instances */
+    if (memory_test_running) {
+        rt_kprintf("Memory test already running\n");
+        return;
+    }
     
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
-    /* Initialize QF */
+    /* Initialize only the memory event pool */
+    PerfCommon_initMemoryPool();
+    
+    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
     QF_init();
     
     /* Construct the memory AO */
@@ -435,26 +481,44 @@ void MemoryTest_start(void) {
                   memory_stack, sizeof(memory_stack),
                   (void *)0);
     
+    /* Initialize QF framework (returns immediately in RT-Thread) */
+    QF_run();
+    
+    /* Mark test as running */
+    memory_test_running = RT_TRUE;
+    
     /* Send start signal */
     QACTIVE_POST(&l_memoryAO.super, Q_NEW(QEvt, MEMORY_START_SIG), &l_memoryAO);
     
-    /* Run the test */
-    QF_run();
+    rt_kprintf("Memory test started successfully\n");
 }
 
 void MemoryTest_stop(void) {
+    if (!memory_test_running) {
+        rt_kprintf("Memory test not running\n");
+        return;
+    }
+    
     /* Send stop signal */
     QACTIVE_POST(&l_memoryAO.super, Q_NEW(QEvt, MEMORY_STOP_SIG), &l_memoryAO);
+    
+    /* Give time for stop signal to be processed */
+    rt_thread_mdelay(200);
     
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_memoryAO.super, MEMORY_START_SIG);
     QActive_unsubscribe(&l_memoryAO.super, MEMORY_STOP_SIG);
+    
+    /* Mark test as stopped */
+    memory_test_running = RT_FALSE;
     
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
     
     /* Print final results */
     PerfCommon_printResults("Memory", g_memory_measurements);
+    
+    rt_kprintf("Memory test stopped successfully\n");
 }
 
 /* RT-Thread MSH command exports */

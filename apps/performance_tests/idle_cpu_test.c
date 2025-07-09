@@ -91,7 +91,6 @@ static void idle_monitor_thread_func(void *parameter) {
         uint32_t current_idle_count = g_idle_count;
         
         if (last_time != 0) {
-            uint32_t time_delta = current_time - last_time;
             uint32_t idle_delta = current_idle_count - last_idle_count;
             
             /* Send idle measurement event */
@@ -142,13 +141,20 @@ static void cpu_load_thread_func(void *parameter) {
 /*==========================================================================*/
 
 static QState IdleCpuAO_initial(IdleCpuAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-    
-    /* Subscribe to idle CPU test signals */
-    QActive_subscribe(&me->super, IDLE_CPU_START_SIG);
-    QActive_subscribe(&me->super, IDLE_CPU_STOP_SIG);
-    
-    return Q_TRAN(&IdleCpuAO_idle);
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            /* Subscribe to idle CPU test signals */
+            QActive_subscribe(&me->super, IDLE_CPU_START_SIG);
+            QActive_subscribe(&me->super, IDLE_CPU_STOP_SIG);
+            return Q_HANDLED();
+        }
+        case Q_INIT_SIG: {
+            return Q_TRAN(&IdleCpuAO_idle);
+        }
+        default: {
+            return Q_SUPER(&QHsm_top);
+        }
+    }
 }
 
 static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e) {
@@ -157,6 +163,21 @@ static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Idle CPU Test: Idle state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -178,11 +199,11 @@ static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e) {
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
             
-            /* Create idle monitor thread */
+            /* Create idle monitor thread with smaller stack for embedded */
             idle_monitor_thread = rt_thread_create("idle_mon",
                                                   idle_monitor_thread_func,
                                                   RT_NULL,
-                                                  2048,
+                                                  1024,  /* Reduced from 2048 */
                                                   LOAD_THREAD_PRIO,
                                                   20);
             if (idle_monitor_thread != RT_NULL) {
@@ -225,6 +246,23 @@ static QState IdleCpuAO_measuring(IdleCpuAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Idle CPU Test: Measuring state\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            g_stopLoadThreads = RT_TRUE;
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_INIT_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
@@ -302,13 +340,6 @@ static QState IdleCpuAO_measuring(IdleCpuAO * const me, QEvt const * const e) {
             break;
         }
         
-        case Q_EXIT_SIG: {
-            QTimeEvt_disarm(&me->timeEvt);
-            g_stopLoadThreads = RT_TRUE;
-            status = Q_HANDLED();
-            break;
-        }
-        
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
@@ -329,17 +360,31 @@ void rt_hw_idle_hook(void) {
 }
 
 /*==========================================================================*/
+/* Idle CPU Test Static Variables - Persistent for RT-Thread integration */
+/*==========================================================================*/
+
+static QEvt const *idle_cpu_queueSto[10];    /* Reduced queue size */
+static uint8_t idle_cpu_stack[1024];         /* Reduced stack size for embedded */
+static rt_bool_t idle_cpu_test_running = RT_FALSE;
+
+/*==========================================================================*/
 /* Idle CPU Test Public Functions */
 /*==========================================================================*/
 
 void IdleCpuTest_start(void) {
-    static QEvt const *idle_cpu_queueSto[15];
-    static uint8_t idle_cpu_stack[2048];
+    /* Prevent multiple simultaneous test instances */
+    if (idle_cpu_test_running) {
+        rt_kprintf("Idle CPU test already running\n");
+        return;
+    }
     
     /* Initialize common performance test infrastructure */
     PerfCommon_initTest();
     
-    /* Initialize QF */
+    /* Initialize only the idle CPU event pool */
+    PerfCommon_initIdleCpuPool();
+    
+    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
     QF_init();
     
     /* Construct the idle CPU AO */
@@ -352,26 +397,44 @@ void IdleCpuTest_start(void) {
                   idle_cpu_stack, sizeof(idle_cpu_stack),
                   (void *)0);
     
+    /* Initialize QF framework (returns immediately in RT-Thread) */
+    QF_run();
+    
+    /* Mark test as running */
+    idle_cpu_test_running = RT_TRUE;
+    
     /* Send start signal */
     QACTIVE_POST(&l_idleCpuAO.super, Q_NEW(QEvt, IDLE_CPU_START_SIG), &l_idleCpuAO);
     
-    /* Run the test */
-    QF_run();
+    rt_kprintf("Idle CPU test started successfully\n");
 }
 
 void IdleCpuTest_stop(void) {
+    if (!idle_cpu_test_running) {
+        rt_kprintf("Idle CPU test not running\n");
+        return;
+    }
+    
     /* Send stop signal */
     QACTIVE_POST(&l_idleCpuAO.super, Q_NEW(QEvt, IDLE_CPU_STOP_SIG), &l_idleCpuAO);
+    
+    /* Give time for stop signal to be processed */
+    rt_thread_mdelay(200);
     
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_idleCpuAO.super, IDLE_CPU_START_SIG);
     QActive_unsubscribe(&l_idleCpuAO.super, IDLE_CPU_STOP_SIG);
+    
+    /* Mark test as stopped */
+    idle_cpu_test_running = RT_FALSE;
     
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
     
     /* Print final results */
     PerfCommon_printResults("Idle CPU", g_idle_count);
+    
+    rt_kprintf("Idle CPU test stopped successfully\n");
 }
 
 /* RT-Thread MSH command exports */
