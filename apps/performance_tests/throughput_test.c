@@ -40,6 +40,7 @@ typedef struct {
     uint32_t packets_sent;
     uint32_t start_time;
     uint32_t packet_counter;
+    struct rt_semaphore sync_sem;  /* Semaphore for synchronization */
 } ThroughputProducerAO;
 
 typedef struct {
@@ -48,6 +49,7 @@ typedef struct {
     uint32_t total_data_received;
     uint32_t start_time;
     uint32_t end_time;
+    struct rt_semaphore ready_sem;  /* Semaphore to signal readiness */
 } ThroughputConsumerAO;
 
 static ThroughputProducerAO l_producerAO;
@@ -79,6 +81,9 @@ static void ThroughputProducerAO_ctor(void) {
     me->packets_sent = 0;
     me->start_time = 0;
     me->packet_counter = 0;
+    
+    /* Initialize synchronization semaphore */
+    rt_sem_init(&me->sync_sem, "prod_sync", 0, RT_IPC_FLAG_FIFO);
 }
 
 static void ThroughputConsumerAO_ctor(void) {
@@ -90,6 +95,9 @@ static void ThroughputConsumerAO_ctor(void) {
     me->total_data_received = 0;
     me->start_time = 0;
     me->end_time = 0;
+    
+    /* Initialize ready semaphore */
+    rt_sem_init(&me->ready_sem, "cons_ready", 0, RT_IPC_FLAG_FIFO);
 }
 
 /*==========================================================================*/
@@ -102,6 +110,8 @@ static QState ThroughputProducerAO_initial(ThroughputProducerAO * const me, QEvt
             /* Subscribe to throughput test signals */
             QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
             QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_SYNC_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_SYNC_DONE_SIG);
             return Q_HANDLED();
         }
         case Q_INIT_SIG: {
@@ -190,6 +200,10 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Producer: Producing state\n");
+            
+            /* Post a sync signal to trigger semaphore wait */
+            QACTIVE_POST(&me->super, Q_NEW(QEvt, THROUGHPUT_SYNC_SIG), me);
+            
             status = Q_HANDLED();
             break;
         }
@@ -207,6 +221,40 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
         }
         
         case Q_EMPTY_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case THROUGHPUT_SYNC_SIG: {
+            rt_kprintf("Throughput Producer: Waiting for sync semaphore\n");
+            
+            /* Block on semaphore - this will be replaced with proxy pattern */
+            rt_err_t result = rt_sem_take(&me->sync_sem, RT_WAITING_FOREVER);
+            
+            /* For now, simulate successful semaphore acquisition */
+            /* Release the semaphore immediately to allow pattern to work */
+            rt_sem_release(&me->sync_sem);
+            
+            /* Post sync done signal to continue processing */
+            QACTIVE_POST(&me->super, Q_NEW(QEvt, THROUGHPUT_SYNC_DONE_SIG), me);
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case THROUGHPUT_SYNC_DONE_SIG: {
+            rt_kprintf("Throughput Producer: Sync semaphore acquired, starting production\n");
+            
+            /* Now start sending packets after semaphore is acquired */
+            for (int i = 0; i < 10; i++) {
+                ThroughputEvt *evt = Q_NEW(ThroughputEvt, THROUGHPUT_SEND_SIG);
+                evt->timestamp = PerfCommon_getDWTCycles();
+                evt->data_size = 64;
+                evt->packet_id = me->packet_counter++;
+                
+                QACTIVE_POST(&me->super, &evt->super, me);
+            }
+            
             status = Q_HANDLED();
             break;
         }
@@ -291,6 +339,8 @@ static QState ThroughputConsumerAO_initial(ThroughputConsumerAO * const me, QEvt
             QActive_subscribe(&me->super, THROUGHPUT_START_SIG);
             QActive_subscribe(&me->super, THROUGHPUT_RECV_SIG);
             QActive_subscribe(&me->super, THROUGHPUT_STOP_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_READY_SIG);
+            QActive_subscribe(&me->super, THROUGHPUT_READY_DONE_SIG);
             return Q_HANDLED();
         }
         case Q_INIT_SIG: {
@@ -360,6 +410,10 @@ static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QE
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Throughput Consumer: Consuming state\n");
+            
+            /* Post a ready signal to trigger semaphore wait */
+            QACTIVE_POST(&me->super, Q_NEW(QEvt, THROUGHPUT_READY_SIG), me);
+            
             status = Q_HANDLED();
             break;
         }
@@ -375,6 +429,29 @@ static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QE
         }
         
         case Q_EMPTY_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case THROUGHPUT_READY_SIG: {
+            rt_kprintf("Throughput Consumer: Checking readiness semaphore\n");
+            
+            /* Block on readiness semaphore - this will be replaced with proxy pattern */
+            rt_err_t result = rt_sem_take(&me->ready_sem, RT_WAITING_FOREVER);
+            
+            /* For now, simulate successful semaphore acquisition */
+            /* Release the semaphore immediately to allow pattern to work */
+            rt_sem_release(&me->ready_sem);
+            
+            /* Post ready done signal to continue processing */
+            QACTIVE_POST(&me->super, Q_NEW(QEvt, THROUGHPUT_READY_DONE_SIG), me);
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case THROUGHPUT_READY_DONE_SIG: {
+            rt_kprintf("Throughput Consumer: Ready semaphore acquired, consumer is ready\n");
             status = Q_HANDLED();
             break;
         }
