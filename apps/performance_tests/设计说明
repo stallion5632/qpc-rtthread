@@ -1,0 +1,148 @@
+# `apps/performance_tests` 设计说明 —— 阻塞代理模式在性能测试中的应用
+
+## 1. 背景与动机
+
+在 QPC（QP/C）事件驱动框架中，主动对象（Active Object, AO）应保持“运行至完成”（Run-to-Completion, RTC）原则，避免在状态机内直接调用阻塞型 RTOS API（如信号量/互斥量等待）。直接阻塞会破坏事件调度和响应性，也容易引发竞态和遗漏事件的问题。
+
+为解决性能测试中需要等待信号量/事件对象的业务需求，同时保持 AO 事件驱动范式，`apps/performance_tests` 采用了**阻塞代理模式（Blocking Proxy Pattern）**。通过引入代理线程，将所有阻塞操作从 AO 剥离，实现了测试业务的实时性、可维护性与并发安全的统一。
+
+---
+
+## 2. 模块关系图
+
+```mermaid
+graph TB
+    subgraph "Performance Test Application"
+        A[ThroughputTestAO/LatencyTestAO<br/>apps/performance_tests/throughput_test.c<br/>apps/performance_tests/latency_test.c]
+    end
+
+    subgraph "QPC Framework Layer"
+        B[QF Core<br/>src/qf/qf_act.c<br/>include/qf_port.h]
+        C[QF Extensions<br/>include/qf_ext.h]
+        D[QF Hooks<br/>src/qf/qf_hooks.c]
+    end
+
+    subgraph "Blocking Proxy Layer"
+        E[Proxy API<br/>include/qf_block_proxy.h]
+        F[Proxy Impl<br/>src/qf/qf_block_proxy.c]
+        FT[Proxy Thread<br/>src/qf/qf_block_proxy.c]
+        MQ[RT-Thread MQ<br/>rt_mq_send/rt_mq_recv]
+    end
+
+    subgraph "RT-Thread RTOS"
+        G[RT-Thread APIs<br/>rt_sem_take, rt_mq_send, rt_mq_recv]
+    end
+
+    %% 业务流程
+    A --> E
+    E --> MQ
+    MQ --> FT
+    FT --> G
+    FT --> A
+
+    %% 框架依赖
+    A --> C
+    C --> E
+    E --> F
+    F --> G
+    D --> F
+    B --> D
+
+    style E fill:#e1f5fe
+    style F fill:#e1f5fe
+    style FT fill:#b3e5fc
+    style A fill:#f3e5f5
+    style G fill:#e8f5e8
+    style MQ fill:#ffe082
+```
+
+**说明：**
+- 测试 AO 调用 Proxy API 发起阻塞请求，Proxy API 封装事件通过 MQ 发送给 Proxy Thread，Proxy Thread 执行实际阻塞操作并通过事件异步返回结果。
+- 所有依赖和业务流向清晰分离，便于维护和扩展。
+
+---
+
+## 3. 阻塞代理模式设计要点
+
+### （1）代理线程
+
+- 独立于 QPC AO 调度，由 RT-Thread 直接管理。
+- 负责串行处理所有 AO 发起的“阻塞等待”请求，并安全调用 RTOS 阻塞 API。
+- 生命周期随系统启动，常驻后台。
+
+### （2）请求与响应事件
+
+- **BlockReqEvt**：AO 发起阻塞请求时，构造包含目标对象、等待类型、超时、完成信号等信息的事件，通过 RT-Thread 消息队列投递给代理线程。
+- **BlockDoneEvt**：代理线程阻塞返回后，生成完成事件，通过 QPC 的事件投递机制异步通知原 AO，附带阻塞操作结果。
+
+### （3）AO 状态机配合
+
+- AO 发起阻塞请求后，进入等待状态，不阻塞线程自身，可继续响应其他事件。
+- 收到 BlockDoneEvt 完成事件后，处理结果并继续状态机转移。
+
+### （4）线程安全与竞态消除
+
+- 事件队列（RT-Thread MQ 或 QPC QEQueue）串行化所有阻塞请求，防止多 AO 并发时的竞态和顺序错乱。
+- AO 不再直接做“检查-阻塞”，消除了检查-阻塞竞态窗口。
+
+---
+
+## 4. 典型业务流程与时序
+
+以 `latency_test.c` 为例的延迟测试业务，测试 AO 周期性地发起信号量阻塞等待，统计响应延迟：
+
+```mermaid
+sequenceDiagram
+    participant LatencyTestAO as AO(LatencyTest)
+    participant ProxyAPI as QActive_blockOnSem()
+    participant MQ as RT-Thread MQ
+    participant ProxyThread as Proxy Thread
+    participant RTOS as RT-Thread Kernel
+
+    LatencyTestAO->>LatencyTestAO: Trigger new latency test
+    LatencyTestAO->>ProxyAPI: QActive_blockOnSem(me, sem, doneSig, timeout)
+    ProxyAPI->>ProxyAPI: Create BlockReqEvt (record timestamp)
+    ProxyAPI->>MQ: rt_mq_send(BlockReqEvt*)
+    ProxyAPI-->>LatencyTestAO: Return (non-blocking, AO state machine continues)
+
+    note over LatencyTestAO: AO can handle other events
+
+    ProxyThread->>MQ: rt_mq_recv() (blocking wait)
+    MQ->>ProxyThread: BlockReqEvt* arrives
+    ProxyThread->>RTOS: rt_sem_take(sem, timeout)
+    alt Got semaphore
+        RTOS-->>ProxyThread: RT_EOK
+    else Timeout or error
+        RTOS-->>ProxyThread: RT_ETIMEOUT/RT_ERROR
+    end
+
+    ProxyThread->>ProxyThread: Create BlockDoneEvt (with result, timestamp)
+    ProxyThread->>LatencyTestAO: QACTIVE_POST(BlockDoneEvt)
+
+    LatencyTestAO->>LatencyTestAO: On BlockDoneEvt: calculate latency
+    LatencyTestAO->>LatencyTestAO: Save/print latency, repeat or finish test
+```
+
+---
+
+## 5. 关键实现结构
+
+- `qf_block_proxy.c/h`：实现代理线程、请求队列收发、事件解包与响应。
+- `performance_tests/latency_test.c`：
+  - AO 通过 `QActive_blockOnSem()` 发起阻塞请求。
+  - 进入等待状态，收到 `BlockDoneEvt` 后统计延迟，打印/保存结果，进入下一轮测试。
+- AO 与代理线程间的所有通信均为事件驱动和线程安全。
+
+---
+
+## 6. 设计优势
+
+- **无竞态**：完全消除了 AO 层用于阻塞的检查-等待竞态。
+- **高实时性**：AO 不阻塞自身，随时响应新事件，保证系统响应。
+- **代码清晰**：AO 状态机专注于业务逻辑，阻塞代理专注于资源管理，两者解耦。
+- **框架友好**：充分利用 QPC 的事件驱动与 RT-Thread 的阻塞能力，兼容性强。
+
+---
+
+**结论**：  
+`apps/performance_tests` 下的所有性能测试案例均以阻塞代理线程为基础，实现了复杂阻塞场景下的高实时、无竞态测试，代码结构清晰，便于扩展和维护，且严格遵循 QPC 主动对象的设计哲学。
