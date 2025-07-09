@@ -43,6 +43,8 @@ enum PerformanceTestSignals {
     LATENCY_MEASURE_SIG,
     LATENCY_TIMEOUT_SIG,
     LATENCY_STOP_SIG,
+    LATENCY_SYNC_SIG,         /* Signal to trigger semaphore wait */
+    LATENCY_SYNC_DONE_SIG,    /* Signal when semaphore is available */
     
     /* Throughput test signals */
     THROUGHPUT_START_SIG = Q_USER_SIG + 10,
@@ -50,6 +52,10 @@ enum PerformanceTestSignals {
     THROUGHPUT_RECV_SIG, 
     THROUGHPUT_TIMEOUT_SIG,
     THROUGHPUT_STOP_SIG,
+    THROUGHPUT_SYNC_SIG,         /* Signal to trigger semaphore wait */
+    THROUGHPUT_SYNC_DONE_SIG,    /* Signal when semaphore is available */
+    THROUGHPUT_READY_SIG,        /* Signal to check consumer readiness */
+    THROUGHPUT_READY_DONE_SIG,   /* Signal when consumer is ready */
     
     /* Jitter test signals */
     JITTER_START_SIG = Q_USER_SIG + 20,

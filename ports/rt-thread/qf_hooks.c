@@ -1,6 +1,10 @@
 #include <rtthread.h>
 #include "qpc.h"
 
+#ifdef QF_BLOCKING_PROXY_ENABLE
+#include "qf_block_proxy.h"
+#endif
+
 static rt_timer_t qpc_tick_timer;
 
 void QF_onClockTick(void *parameter) {
@@ -12,6 +16,11 @@ void QF_onStartup(void) {
                                             RT_NULL, 10,
                                             RT_TIMER_FLAG_PERIODIC);
     rt_timer_start(qpc_tick_timer);
+
+#ifdef QF_BLOCKING_PROXY_ENABLE
+    /* Initialize blocking proxy */
+    QF_proxyInit();
+#endif
 }
 
 void QF_onCleanup(void) {
