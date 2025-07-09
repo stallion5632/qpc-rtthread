@@ -28,6 +28,10 @@
 ============================================================================*/
 #include "perf_common.h"
 
+#ifdef QF_BLOCKING_PROXY_ENABLE
+#include "qf_ext.h"
+#endif
+
 Q_DEFINE_THIS_FILE
 
 /*==========================================================================*/
@@ -43,6 +47,7 @@ typedef struct {
     uint32_t max_latency;
     uint32_t total_latency;
     uint32_t sequence_counter;
+    struct rt_semaphore measure_sem;  /* Semaphore for measurement sync */
 } LatencyAO;
 
 static LatencyAO l_latencyAO;
@@ -68,6 +73,9 @@ static void LatencyAO_ctor(void) {
     me->max_latency = 0;
     me->total_latency = 0;
     me->sequence_counter = 0;
+    
+    /* Initialize measurement semaphore */
+    rt_sem_init(&me->measure_sem, "lat_measure", 0, RT_IPC_FLAG_FIFO);
 }
 
 /*==========================================================================*/
@@ -82,6 +90,8 @@ static QState LatencyAO_initial(LatencyAO * const me, QEvt const * const e) {
             QActive_subscribe(&me->super, LATENCY_END_SIG);
             QActive_subscribe(&me->super, LATENCY_MEASURE_SIG);
             QActive_subscribe(&me->super, LATENCY_STOP_SIG);
+            QActive_subscribe(&me->super, LATENCY_SYNC_SIG);
+            QActive_subscribe(&me->super, LATENCY_SYNC_DONE_SIG);
             return Q_HANDLED();
         }
         case Q_INIT_SIG: {
@@ -160,12 +170,8 @@ static QState LatencyAO_testing(LatencyAO * const me, QEvt const * const e) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Latency Test: Testing state\n");
             
-            /* Start the first measurement */
-            LatencyEvt *evt = Q_NEW(LatencyEvt, LATENCY_MEASURE_SIG);
-            evt->timestamp = PerfCommon_getDWTCycles();
-            evt->sequence_id = ++me->sequence_counter;
-            
-            QACTIVE_POST(&me->super, &evt->super, me);
+            /* Post a sync signal to trigger semaphore wait before starting measurements */
+            QACTIVE_POST(&me->super, Q_NEW(QEvt, LATENCY_SYNC_SIG), me);
             
             status = Q_HANDLED();
             break;
@@ -183,6 +189,52 @@ static QState LatencyAO_testing(LatencyAO * const me, QEvt const * const e) {
         }
         
         case Q_EMPTY_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case LATENCY_SYNC_SIG: {
+            rt_kprintf("Latency Test: Waiting for measurement semaphore\n");
+            
+#ifdef QF_BLOCKING_PROXY_ENABLE
+            /* Use blocking proxy pattern */
+            QActive_blockOnSem(&me->super, &me->measure_sem, LATENCY_SYNC_DONE_SIG, RT_WAITING_FOREVER);
+#else
+            /* Block on measurement semaphore - traditional approach */
+            rt_err_t result = rt_sem_take(&me->measure_sem, RT_WAITING_FOREVER);
+            
+            /* For now, simulate successful semaphore acquisition */
+            /* Release the semaphore immediately to allow pattern to work */
+            rt_sem_release(&me->measure_sem);
+            
+            /* Post sync done signal to continue processing */
+            QACTIVE_POST(&me->super, Q_NEW(QEvt, LATENCY_SYNC_DONE_SIG), me);
+#endif
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case LATENCY_SYNC_DONE_SIG: {
+#ifdef QF_BLOCKING_PROXY_ENABLE
+            /* Handle BlockDoneEvt when using proxy pattern */
+            BlockDoneEvt const *done = (BlockDoneEvt const *)e;
+            if (done->result == RT_EOK) {
+                rt_kprintf("Latency Test: Measurement semaphore acquired via proxy, starting measurements\n");
+            } else {
+                rt_kprintf("Latency Test: Measurement semaphore acquisition failed: %d\n", done->result);
+            }
+#else
+            rt_kprintf("Latency Test: Measurement semaphore acquired, starting measurements\n");
+#endif
+            
+            /* Start the first measurement */
+            LatencyEvt *evt = Q_NEW(LatencyEvt, LATENCY_MEASURE_SIG);
+            evt->timestamp = PerfCommon_getDWTCycles();
+            evt->sequence_id = ++me->sequence_counter;
+            
+            QACTIVE_POST(&me->super, &evt->super, me);
+            
             status = Q_HANDLED();
             break;
         }

@@ -28,6 +28,10 @@
 ============================================================================*/
 #include "perf_common.h"
 
+#ifdef QF_BLOCKING_PROXY_ENABLE
+#include "qf_ext.h"
+#endif
+
 Q_DEFINE_THIS_FILE
 
 /*==========================================================================*/
@@ -228,7 +232,11 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
         case THROUGHPUT_SYNC_SIG: {
             rt_kprintf("Throughput Producer: Waiting for sync semaphore\n");
             
-            /* Block on semaphore - this will be replaced with proxy pattern */
+#ifdef QF_BLOCKING_PROXY_ENABLE
+            /* Use blocking proxy pattern */
+            QActive_blockOnSem(&me->super, &me->sync_sem, THROUGHPUT_SYNC_DONE_SIG, RT_WAITING_FOREVER);
+#else
+            /* Block on semaphore - traditional approach */
             rt_err_t result = rt_sem_take(&me->sync_sem, RT_WAITING_FOREVER);
             
             /* For now, simulate successful semaphore acquisition */
@@ -237,13 +245,24 @@ static QState ThroughputProducerAO_producing(ThroughputProducerAO * const me, QE
             
             /* Post sync done signal to continue processing */
             QACTIVE_POST(&me->super, Q_NEW(QEvt, THROUGHPUT_SYNC_DONE_SIG), me);
+#endif
             
             status = Q_HANDLED();
             break;
         }
         
         case THROUGHPUT_SYNC_DONE_SIG: {
+#ifdef QF_BLOCKING_PROXY_ENABLE
+            /* Handle BlockDoneEvt when using proxy pattern */
+            BlockDoneEvt const *done = (BlockDoneEvt const *)e;
+            if (done->result == RT_EOK) {
+                rt_kprintf("Throughput Producer: Sync semaphore acquired via proxy, starting production\n");
+            } else {
+                rt_kprintf("Throughput Producer: Sync semaphore acquisition failed: %d\n", done->result);
+            }
+#else
             rt_kprintf("Throughput Producer: Sync semaphore acquired, starting production\n");
+#endif
             
             /* Now start sending packets after semaphore is acquired */
             for (int i = 0; i < 10; i++) {
@@ -436,7 +455,11 @@ static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QE
         case THROUGHPUT_READY_SIG: {
             rt_kprintf("Throughput Consumer: Checking readiness semaphore\n");
             
-            /* Block on readiness semaphore - this will be replaced with proxy pattern */
+#ifdef QF_BLOCKING_PROXY_ENABLE
+            /* Use blocking proxy pattern */
+            QActive_blockOnSem(&me->super, &me->ready_sem, THROUGHPUT_READY_DONE_SIG, RT_WAITING_FOREVER);
+#else
+            /* Block on readiness semaphore - traditional approach */
             rt_err_t result = rt_sem_take(&me->ready_sem, RT_WAITING_FOREVER);
             
             /* For now, simulate successful semaphore acquisition */
@@ -445,13 +468,24 @@ static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QE
             
             /* Post ready done signal to continue processing */
             QACTIVE_POST(&me->super, Q_NEW(QEvt, THROUGHPUT_READY_DONE_SIG), me);
+#endif
             
             status = Q_HANDLED();
             break;
         }
         
         case THROUGHPUT_READY_DONE_SIG: {
+#ifdef QF_BLOCKING_PROXY_ENABLE
+            /* Handle BlockDoneEvt when using proxy pattern */
+            BlockDoneEvt const *done = (BlockDoneEvt const *)e;
+            if (done->result == RT_EOK) {
+                rt_kprintf("Throughput Consumer: Ready semaphore acquired via proxy, consumer is ready\n");
+            } else {
+                rt_kprintf("Throughput Consumer: Ready semaphore acquisition failed: %d\n", done->result);
+            }
+#else
             rt_kprintf("Throughput Consumer: Ready semaphore acquired, consumer is ready\n");
+#endif
             status = Q_HANDLED();
             break;
         }

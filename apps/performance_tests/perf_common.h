@@ -43,6 +43,8 @@ enum PerformanceTestSignals {
     LATENCY_MEASURE_SIG,
     LATENCY_TIMEOUT_SIG,
     LATENCY_STOP_SIG,
+    LATENCY_SYNC_SIG,         /* Signal to trigger semaphore wait */
+    LATENCY_SYNC_DONE_SIG,    /* Signal when semaphore is available */
     
     /* Throughput test signals */
     THROUGHPUT_START_SIG = Q_USER_SIG + 10,
