@@ -29,7 +29,6 @@
 * @file
 * @brief QF Blocking Proxy Pattern implementation for RT-Thread
 */
-#define QP_IMPL           /* this is QP implementation */
 #include "qf_port.h"      /* QF port */
 #include "qf_pkg.h"
 #include "qassert.h"
