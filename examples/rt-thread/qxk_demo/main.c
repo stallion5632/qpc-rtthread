@@ -27,6 +27,7 @@
 * <info@state-machine.com>
 ============================================================================*/
 #include "qxk_demo.h"
+#include "rt_integration.h"
 
 #ifdef QPC_USING_QXK_DEMO
 #ifdef RT_USING_FINSH
@@ -133,6 +134,11 @@ static QState SensorAO_active(SensorAO * const me, QEvt const * const e) {
             
             rt_kprintf("Sensor: Reading %u, data = %u\n", me->sensor_count, sensor_data);
             
+            /* Update statistics */
+            rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
+            g_system_stats.sensor_readings++;
+            rt_mutex_release(g_config_mutex);
+            
             /* Send data to processor */
             SensorDataEvt *evt = Q_NEW(SensorDataEvt, SENSOR_DATA_SIG);
             evt->data = sensor_data;
@@ -174,6 +180,7 @@ static QState ProcessorAO_initial(ProcessorAO * const me, QEvt const * const e) 
     /* Subscribe to processor signals */
     QActive_subscribe(&me->super, SENSOR_DATA_SIG);
     QActive_subscribe(&me->super, PROCESSOR_START_SIG);
+    QActive_subscribe(&me->super, NETWORK_CONFIG_SIG);
     
     return Q_TRAN(&ProcessorAO_idle);
 }
@@ -201,6 +208,21 @@ static QState ProcessorAO_idle(ProcessorAO * const me, QEvt const * const e) {
             break;
         }
         
+        case NETWORK_CONFIG_SIG: {
+            NetworkConfigEvt const *config_evt = (NetworkConfigEvt const *)e;
+            rt_kprintf("Processor: Received network configuration - sensor_rate=%u\n", 
+                      config_evt->sensor_rate);
+            
+            /* Update sensor timing if needed */
+            if (config_evt->sensor_rate != g_shared_config.sensor_rate) {
+                rt_kprintf("Processor: Updating sensor rate to %u\n", config_evt->sensor_rate);
+                /* In a real implementation, this would update the sensor's timer */
+            }
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
@@ -217,6 +239,11 @@ static QState ProcessorAO_processing(ProcessorAO * const me, QEvt const * const 
         case Q_ENTRY_SIG: {
             me->processed_count++;
             rt_kprintf("Processor: Processing data (count: %u)\n", me->processed_count);
+            
+            /* Update statistics */
+            rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
+            g_system_stats.processed_data++;
+            rt_mutex_release(g_config_mutex);
             
             /* Simulate processing time */
             uint32_t result = me->processed_count * 100;
@@ -280,6 +307,26 @@ static void WorkerThread_run(QXThread * const me) {
                     QXThread_delay(50); /* 500ms delay */
                     
                     rt_kprintf("Worker: Work ID %u completed\n", evt->work_id);
+                    
+                    /* Send processed data to network thread */
+                    NetworkDataEvt *net_data = (NetworkDataEvt *)rt_malloc(sizeof(NetworkDataEvt));
+                    if (net_data != RT_NULL) {
+                        net_data->data = evt->work_id * 1000; /* Processed data */
+                        net_data->timestamp = rt_tick_get();
+                        net_data->source_id = wt->work_count;
+                        
+                        /* Send to network queue */
+                        if (rt_mq_send(g_network_queue, &net_data, sizeof(NetworkDataEvt*)) != RT_EOK) {
+                            rt_kprintf("Worker: Failed to send data to network queue\n");
+                            rt_free(net_data);
+                        } else {
+                            rt_kprintf("Worker: Data sent to network queue\n");
+                        }
+                    }
+                    
+                    /* Release storage semaphore to trigger save */
+                    rt_sem_release(g_storage_sem);
+                    
                     break;
                 }
                 
@@ -317,6 +364,14 @@ static void MonitorThread_run(QXThread * const me) {
         rt_kprintf("Monitor: System check #%u - All systems operational\n", 
                   mt->check_count);
         
+        /* Update health statistics */
+        rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
+        g_system_stats.health_checks++;
+        rt_mutex_release(g_config_mutex);
+        
+        /* Send health check event to system */
+        rt_event_send(g_system_event, RT_EVENT_HEALTH_CHECK);
+        
         /* Send check signal to monitor (could be used for health checks) */
         QACTIVE_POST((QActive *)&l_monitorThread, Q_NEW(QEvt, MONITOR_CHECK_SIG), me);
     }
@@ -330,16 +385,23 @@ void QXKDemo_init(void) {
     static QF_MPOOL_EL(SensorDataEvt) sensorDataPool[10];
     static QF_MPOOL_EL(ProcessorResultEvt) processorResultPool[10];
     static QF_MPOOL_EL(WorkerWorkEvt) workerWorkPool[10];
+    static QF_MPOOL_EL(NetworkConfigEvt) networkConfigPool[5];
+    static QF_MPOOL_EL(SystemHealthEvt) systemHealthPool[5];
     
     QF_poolInit(sensorDataPool, sizeof(sensorDataPool), sizeof(SensorDataEvt));
     QF_poolInit(processorResultPool, sizeof(processorResultPool), sizeof(ProcessorResultEvt));
     QF_poolInit(workerWorkPool, sizeof(workerWorkPool), sizeof(WorkerWorkEvt));
+    QF_poolInit(networkConfigPool, sizeof(networkConfigPool), sizeof(NetworkConfigEvt));
+    QF_poolInit(systemHealthPool, sizeof(systemHealthPool), sizeof(SystemHealthEvt));
     
     /* Construct all objects */
     SensorAO_ctor();
     ProcessorAO_ctor();
     WorkerThread_ctor();
     MonitorThread_ctor();
+    
+    /* Initialize RT-Thread integration */
+    rt_integration_init();
 }
 
 /*==========================================================================*/
@@ -391,6 +453,14 @@ int qxk_demo_start(void) {
                    (void *)0);
     
     rt_kprintf("QXK Demo: Started - 2 QActive objects + 2 QXThread extensions\n");
+    
+    /* Start RT-Thread integration components */
+    rt_integration_start();
+    
+    /* Signal that QXK is ready */
+    rt_event_send(g_system_event, RT_EVENT_QXK_READY);
+    
+    rt_kprintf("QXK Demo: RT-Thread integration started - 3 RT-Thread threads\n");
     
     return QF_run(); /* Run the QF application */
 }

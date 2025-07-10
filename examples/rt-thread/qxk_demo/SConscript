@@ -6,6 +6,7 @@ cwd = GetCurrentDir()
 # QXK Demo source files
 src = Split("""
 main.c
+rt_integration.c
 """)
 
 # Include paths
