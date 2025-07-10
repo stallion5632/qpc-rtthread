@@ -69,9 +69,14 @@ static QState MemoryAO_initial(MemoryAO * const me, QEvt const * const e);
 static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e);
 static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e);
 
-/* Memory test thread */
-static void memory_test_thread_func(void *parameter);
-static rt_thread_t memory_test_thread = RT_NULL;
+/* Memory test QXThread */
+typedef struct {
+    QXThread super;
+    uint32_t test_count;
+} MemoryTestThread;
+
+static MemoryTestThread l_memoryTestThread;
+static void MemoryTestThread_run(QXThread * const me);
 
 /*==========================================================================*/
 /* Active Object Constructor */
@@ -137,8 +142,25 @@ static void free_all_tracked(void) {
 /* Memory Test Thread Function */
 /*==========================================================================*/
 
-static void memory_test_thread_func(void *parameter) {
-    (void)parameter;
+/*==========================================================================*/
+/* QXThread Constructor */
+/*==========================================================================*/
+
+static void MemoryTestThread_ctor(void) {
+    MemoryTestThread *me = &l_memoryTestThread;
+    
+    QXThread_ctor(&me->super, &MemoryTestThread_run, 0);
+    me->test_count = 0;
+}
+
+/*==========================================================================*/
+/* QXThread Function */
+/*==========================================================================*/
+
+static void MemoryTestThread_run(QXThread * const me) {
+    MemoryTestThread *mtt = (MemoryTestThread *)me;
+    
+    rt_kprintf("Memory Test QXThread: Started\n");
     
     uint32_t cycle = 0;
     
@@ -152,10 +174,10 @@ static void memory_test_thread_func(void *parameter) {
             alloc_evt->alloc_size = size;
             alloc_evt->ptr = RT_NULL;
             
-            QACTIVE_POST(&l_memoryAO.super, &alloc_evt->super, &l_memoryAO);
+            QACTIVE_POST(&l_memoryAO.super, &alloc_evt->super, me);
             
             /* Small delay between allocations */
-            rt_thread_mdelay(10);
+            QXThread_delay(1); /* 10ms delay using QXK API */
             
             if (g_stopLoadThreads) break;
         }
@@ -167,14 +189,15 @@ static void memory_test_thread_func(void *parameter) {
             free_evt->alloc_size = 0;
             free_evt->ptr = RT_NULL;
             
-            QACTIVE_POST(&l_memoryAO.super, &free_evt->super, &l_memoryAO);
+            QACTIVE_POST(&l_memoryAO.super, &free_evt->super, me);
         }
         
         cycle++;
-        rt_thread_mdelay(100);
+        mtt->test_count++;
+        QXThread_delay(10); /* 100ms delay using QXK API */
     }
     
-    rt_kprintf("Memory test thread exiting\n");
+    rt_kprintf("Memory Test QXThread: Exiting, test cycles: %u\n", mtt->test_count);
 }
 
 /*==========================================================================*/
@@ -247,16 +270,18 @@ static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
             
-            /* Create memory test thread with smaller stack for embedded */
-            memory_test_thread = rt_thread_create("mem_test",
-                                                 memory_test_thread_func,
-                                                 RT_NULL,
-                                                 1024,  /* Reduced from 2048 */
-                                                 LOAD_THREAD_PRIO,
-                                                 20);
-            if (memory_test_thread != RT_NULL) {
-                rt_thread_startup(memory_test_thread);
-            }
+            /* Create memory test QXThread with smaller stack for embedded */
+            MemoryTestThread_ctor();
+            
+            /* Start memory test QXThread */
+            static QEvt const *memoryTestQueue[10];
+            static uint8_t memoryTestStack[1024];
+            
+            QXTHREAD_START(&l_memoryTestThread.super,
+                          LOAD_THREAD_PRIO,
+                          memoryTestQueue, Q_DIM(memoryTestQueue),
+                          memoryTestStack, sizeof(memoryTestStack),
+                          (void *)0);
             
             status = Q_TRAN(&MemoryAO_testing);
             break;

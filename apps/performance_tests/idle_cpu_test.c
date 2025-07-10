@@ -51,13 +51,23 @@ static QState IdleCpuAO_initial(IdleCpuAO * const me, QEvt const * const e);
 static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e);
 static QState IdleCpuAO_measuring(IdleCpuAO * const me, QEvt const * const e);
 
-/* Idle monitoring thread */
-static void idle_monitor_thread_func(void *parameter);
-static rt_thread_t idle_monitor_thread = RT_NULL;
+/* Idle monitoring QXThread */
+typedef struct {
+    QXThread super;
+    uint32_t monitor_count;
+} IdleMonitorThread;
 
-/* Load threads for CPU utilization */
-static void cpu_load_thread_func(void *parameter);
-static rt_thread_t cpu_load_thread = RT_NULL;
+static IdleMonitorThread l_idleMonitorThread;
+static void IdleMonitorThread_run(QXThread * const me);
+
+/* CPU load QXThread */
+typedef struct {
+    QXThread super;
+    uint32_t load_count;
+} CpuLoadThread;
+
+static CpuLoadThread l_cpuLoadThread;
+static void CpuLoadThread_run(QXThread * const me);
 
 /*==========================================================================*/
 /* Active Object Constructor */
@@ -77,11 +87,31 @@ static void IdleCpuAO_ctor(void) {
 }
 
 /*==========================================================================*/
-/* Thread Functions */
+/* QXThread Constructors */
 /*==========================================================================*/
 
-static void idle_monitor_thread_func(void *parameter) {
-    (void)parameter;
+static void IdleMonitorThread_ctor(void) {
+    IdleMonitorThread *me = &l_idleMonitorThread;
+    
+    QXThread_ctor(&me->super, &IdleMonitorThread_run, 0);
+    me->monitor_count = 0;
+}
+
+static void CpuLoadThread_ctor(void) {
+    CpuLoadThread *me = &l_cpuLoadThread;
+    
+    QXThread_ctor(&me->super, &CpuLoadThread_run, 0);
+    me->load_count = 0;
+}
+
+/*==========================================================================*/
+/* QXThread Functions */
+/*==========================================================================*/
+
+static void IdleMonitorThread_run(QXThread * const me) {
+    IdleMonitorThread *imt = (IdleMonitorThread *)me;
+    
+    rt_kprintf("Idle Monitor QXThread: Started\n");
     
     uint32_t last_idle_count = 0;
     uint32_t last_time = 0;
@@ -98,21 +128,25 @@ static void idle_monitor_thread_func(void *parameter) {
             evt->timestamp = current_time;
             evt->idle_count = idle_delta;
             
-            QACTIVE_POST(&l_idleCpuAO.super, &evt->super, &l_idleCpuAO);
+            QACTIVE_POST(&l_idleCpuAO.super, &evt->super, me);
+            
+            imt->monitor_count++;
         }
         
         last_time = current_time;
         last_idle_count = current_idle_count;
         
         /* Sample every 100ms */
-        rt_thread_mdelay(100);
+        QXThread_delay(10); /* 100ms delay using QXK API */
     }
     
-    rt_kprintf("Idle monitor thread exiting\n");
+    rt_kprintf("Idle Monitor QXThread: Exiting, monitored %u times\n", imt->monitor_count);
 }
 
-static void cpu_load_thread_func(void *parameter) {
-    (void)parameter;
+static void CpuLoadThread_run(QXThread * const me) {
+    CpuLoadThread *clt = (CpuLoadThread *)me;
+    
+    rt_kprintf("CPU Load QXThread: Started\n");
     
     volatile uint32_t dummy = 0;
     
@@ -123,17 +157,19 @@ static void cpu_load_thread_func(void *parameter) {
         }
         
         /* Pause to allow some idle time */
-        rt_thread_mdelay(50);
+        QXThread_delay(5); /* 50ms delay using QXK API */
         
         /* More intensive load */
         for (volatile int i = 0; i < 1000; i++) {
             dummy = dummy ^ (dummy << 2);
         }
         
-        rt_thread_mdelay(30);
+        QXThread_delay(3); /* 30ms delay using QXK API */
+        
+        clt->load_count++;
     }
     
-    rt_kprintf("CPU load thread exiting\n");
+    rt_kprintf("CPU Load QXThread: Exiting, load cycles: %u\n", clt->load_count);
 }
 
 /*==========================================================================*/
@@ -199,27 +235,29 @@ static QState IdleCpuAO_idle(IdleCpuAO * const me, QEvt const * const e) {
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
             
-            /* Create idle monitor thread with smaller stack for embedded */
-            idle_monitor_thread = rt_thread_create("idle_mon",
-                                                  idle_monitor_thread_func,
-                                                  RT_NULL,
-                                                  1024,  /* Reduced from 2048 */
-                                                  LOAD_THREAD_PRIO,
-                                                  20);
-            if (idle_monitor_thread != RT_NULL) {
-                rt_thread_startup(idle_monitor_thread);
-            }
+            /* Create idle monitor QXThread with smaller stack for embedded */
+            IdleMonitorThread_ctor();
             
-            /* Create CPU load thread */
-            cpu_load_thread = rt_thread_create("cpu_load",
-                                              cpu_load_thread_func,
-                                              RT_NULL,
-                                              2048,
-                                              LOAD_THREAD_PRIO + 1,
-                                              20);
-            if (cpu_load_thread != RT_NULL) {
-                rt_thread_startup(cpu_load_thread);
-            }
+            /* Create CPU load QXThread */
+            CpuLoadThread_ctor();
+            
+            /* Start QXThreads */
+            static QEvt const *idleMonitorQueue[10];
+            static uint8_t idleMonitorStack[1024];
+            static QEvt const *cpuLoadQueue[10];
+            static uint8_t cpuLoadStack[2048];
+            
+            QXTHREAD_START(&l_idleMonitorThread.super,
+                          LOAD_THREAD_PRIO,
+                          idleMonitorQueue, Q_DIM(idleMonitorQueue),
+                          idleMonitorStack, sizeof(idleMonitorStack),
+                          (void *)0);
+            
+            QXTHREAD_START(&l_cpuLoadThread.super,
+                          LOAD_THREAD_PRIO + 1,
+                          cpuLoadQueue, Q_DIM(cpuLoadQueue),
+                          cpuLoadStack, sizeof(cpuLoadStack),
+                          (void *)0);
             
             status = Q_TRAN(&IdleCpuAO_measuring);
             break;

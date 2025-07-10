@@ -398,8 +398,18 @@ int qxk_demo_start(void) {
 /* RT-Thread MSH command exports */
 MSH_CMD_EXPORT(qxk_demo_start, start QXK demo with 2 AOs and 2 XThreads);
 
+/* Manual trigger function for explicit start */
+static int qxk_demo_manual_start(void) {
+    rt_kprintf("=== QXK Demo Manual Start ===\n");
+    return qxk_demo_start();
+}
+
 /* RT-Thread application auto-initialization */
-INIT_APP_EXPORT(qxk_demo_start);
+static int qxk_demo_init(void) {
+    rt_kprintf("=== QXK Demo Auto-Initialize ===\n");
+    return qxk_demo_start();
+}
+INIT_APP_EXPORT(qxk_demo_init);
 
 #endif /* RT_USING_FINSH */
 #endif /* QPC_USING_QXK_DEMO */
