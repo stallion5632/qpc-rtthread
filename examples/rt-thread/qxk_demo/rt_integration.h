@@ -36,13 +36,8 @@
 /* RT-Thread Integration Signals */
 /*==========================================================================*/
 enum RTIntegrationSignals {
-    /* Network Thread signals */
-    NETWORK_CONFIG_SIG = MAX_DEMO_SIG,
-    NETWORK_DATA_SIG,
-    NETWORK_SEND_SIG,
-    
     /* Storage Thread signals */
-    STORAGE_SAVE_SIG,
+    STORAGE_SAVE_SIG = MAX_DEMO_SIG,
     STORAGE_STATUS_SIG,
     
     /* Shell Thread signals */
@@ -59,20 +54,6 @@ enum RTIntegrationSignals {
 /*==========================================================================*/
 /* RT-Thread Integration Events */
 /*==========================================================================*/
-typedef struct {
-    QEvt super;
-    uint32_t sensor_rate;      /* Sensor sampling rate */
-    uint32_t network_interval; /* Network transmission interval */
-    uint32_t storage_interval; /* Storage save interval */
-} NetworkConfigEvt;
-
-typedef struct {
-    QEvt super;
-    uint32_t data;
-    uint32_t timestamp;
-    uint32_t source_id;
-} NetworkDataEvt;
-
 typedef struct {
     QEvt super;
     uint32_t data_id;
@@ -99,7 +80,6 @@ typedef struct {
 /* RT-Thread Synchronization Objects */
 /*==========================================================================*/
 /* Global synchronization objects for RT-Thread/QXK communication */
-extern rt_mq_t g_network_queue;        /* Message queue for network data */
 extern rt_mutex_t g_config_mutex;      /* Mutex for shared configuration */
 extern rt_sem_t g_storage_sem;         /* Semaphore for storage coordination */
 extern rt_event_t g_system_event;      /* Event set for system notifications */
@@ -110,7 +90,6 @@ extern rt_event_t g_system_event;      /* Event set for system notifications */
 /* Configuration data protected by mutex */
 typedef struct {
     uint32_t sensor_rate;
-    uint32_t network_interval;
     uint32_t storage_interval;
     uint32_t system_flags;
 } SharedConfig;
@@ -121,7 +100,6 @@ extern SharedConfig g_shared_config;
 typedef struct {
     uint32_t sensor_readings;
     uint32_t processed_data;
-    uint32_t network_transmissions;
     uint32_t storage_saves;
     uint32_t health_checks;
     uint32_t errors;
@@ -132,10 +110,6 @@ extern SystemStats g_system_stats;
 /*==========================================================================*/
 /* RT-Thread Thread Declarations */
 /*==========================================================================*/
-/* Network Thread - Simulates Wi-Fi/Ethernet connectivity */
-void network_thread_entry(void *parameter);
-extern rt_thread_t network_thread;
-
 /* Storage Thread - Manages local data storage */
 void storage_thread_entry(void *parameter);
 extern rt_thread_t storage_thread;
@@ -162,14 +136,13 @@ void rt_integration_get_stats(SystemStats *stats);
 /*==========================================================================*/
 /* RT-Thread Event Flags */
 /*==========================================================================*/
-#define RT_EVENT_NETWORK_READY     (1 << 0)
-#define RT_EVENT_STORAGE_READY     (1 << 1)
-#define RT_EVENT_SHELL_READY       (1 << 2)
-#define RT_EVENT_QXK_READY         (1 << 3)
-#define RT_EVENT_SYSTEM_ERROR      (1 << 4)
-#define RT_EVENT_CONFIG_UPDATED    (1 << 5)
-#define RT_EVENT_DATA_AVAILABLE    (1 << 6)
-#define RT_EVENT_HEALTH_CHECK      (1 << 7)
+#define RT_EVENT_STORAGE_READY     (1 << 0)
+#define RT_EVENT_SHELL_READY       (1 << 1)
+#define RT_EVENT_QXK_READY         (1 << 2)
+#define RT_EVENT_SYSTEM_ERROR      (1 << 3)
+#define RT_EVENT_CONFIG_UPDATED    (1 << 4)
+#define RT_EVENT_DATA_AVAILABLE    (1 << 5)
+#define RT_EVENT_HEALTH_CHECK      (1 << 6)
 
 /*==========================================================================*/
 /* MSH Command Prototypes */

@@ -1,5 +1,5 @@
 /*============================================================================
-* Product: QXK Demo for RT-Thread
+* Product: QActive Demo for RT-Thread
 * Last updated for version 7.2.0
 * Last updated on  2024-12-19
 *
@@ -26,16 +26,16 @@
 * <www.state-machine.com/licensing>
 * <info@state-machine.com>
 ============================================================================*/
-#ifndef QXK_DEMO_H_
-#define QXK_DEMO_H_
+#ifndef QACTIVE_DEMO_H_
+#define QACTIVE_DEMO_H_
 
 #include "qpc.h"
 #include <rtthread.h>
 
 /*==========================================================================*/
-/* QXK Demo Signals */
+/* QActive Demo Signals */
 /*==========================================================================*/
-enum QXKDemoSignals {
+enum QActiveDemoSignals {
     SENSOR_READ_SIG = Q_USER_SIG,
     SENSOR_DATA_SIG,
     PROCESSOR_START_SIG,
@@ -48,7 +48,7 @@ enum QXKDemoSignals {
 };
 
 /*==========================================================================*/
-/* QXK Demo Events */
+/* QActive Demo Events */
 /*==========================================================================*/
 typedef struct {
     QEvt super;
@@ -74,9 +74,9 @@ extern QActive * const AO_Worker;
 extern QActive * const AO_Monitor;
 
 /*==========================================================================*/
-/* QXK Demo Functions */
+/* QActive Demo Functions */
 /*==========================================================================*/
-void QXKDemo_init(void);
-int qxk_demo_start(void);
+void QActiveDemo_init(void);
+int qactive_demo_start(void);
 
-#endif /* QXK_DEMO_H_ */
+#endif /* QACTIVE_DEMO_H_ */

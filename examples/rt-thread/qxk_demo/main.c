@@ -1,5 +1,5 @@
 /*============================================================================
-* Product: QXK Demo for RT-Thread - Main Application
+* Product: QActive Demo for RT-Thread - Main Application
 * Last updated for version 7.2.0
 * Last updated on  2024-12-19
 *
@@ -191,7 +191,6 @@ static QState ProcessorAO_initial(ProcessorAO * const me, QEvt const * const e) 
     /* Subscribe to processor signals */
     QActive_subscribe(&me->super, SENSOR_DATA_SIG);
     QActive_subscribe(&me->super, PROCESSOR_START_SIG);
-    QActive_subscribe(&me->super, NETWORK_CONFIG_SIG);
     
     return Q_TRAN(&ProcessorAO_idle);
 }
@@ -216,21 +215,6 @@ static QState ProcessorAO_idle(ProcessorAO * const me, QEvt const * const e) {
         case PROCESSOR_START_SIG: {
             rt_kprintf("Processor: Manual start triggered\n");
             status = Q_TRAN(&ProcessorAO_processing);
-            break;
-        }
-        
-        case NETWORK_CONFIG_SIG: {
-            NetworkConfigEvt const *config_evt = (NetworkConfigEvt const *)e;
-            rt_kprintf("Processor: Received network configuration - sensor_rate=%u\n", 
-                      config_evt->sensor_rate);
-            
-            /* Update sensor timing if needed */
-            if (config_evt->sensor_rate != g_shared_config.sensor_rate) {
-                rt_kprintf("Processor: Updating sensor rate to %u\n", config_evt->sensor_rate);
-                /* In a real implementation, this would update the sensor's timer */
-            }
-            
-            status = Q_HANDLED();
             break;
         }
         
@@ -354,22 +338,6 @@ static QState WorkerAO_working(WorkerAO * const me, QEvt const * const e) {
         case TIMEOUT_SIG: {
             rt_kprintf("Worker: Work ID %u completed\n", me->current_work_id);
             
-            /* Send processed data to network thread */
-            NetworkDataEvt *net_data = (NetworkDataEvt *)rt_malloc(sizeof(NetworkDataEvt));
-            if (net_data != RT_NULL) {
-                net_data->data = me->current_work_id * 1000; /* Processed data */
-                net_data->timestamp = rt_tick_get();
-                net_data->source_id = me->work_count;
-                
-                /* Send to network queue */
-                if (rt_mq_send(g_network_queue, &net_data, sizeof(NetworkDataEvt*)) != RT_EOK) {
-                    rt_kprintf("Worker: Failed to send data to network queue\n");
-                    rt_free(net_data);
-                } else {
-                    rt_kprintf("Worker: Data sent to network queue\n");
-                }
-            }
-            
             /* Release storage semaphore to trigger save */
             rt_sem_release(g_storage_sem);
             
@@ -467,18 +435,16 @@ static QState MonitorAO_active(MonitorAO * const me, QEvt const * const e) {
 /*==========================================================================*/
 /* QPC Demo Initialization */
 /*==========================================================================*/
-void QXKDemo_init(void) {
+void QActiveDemo_init(void) {
     /* Initialize event pools */
     static QF_MPOOL_EL(SensorDataEvt) sensorDataPool[10];
     static QF_MPOOL_EL(ProcessorResultEvt) processorResultPool[10];
     static QF_MPOOL_EL(WorkerWorkEvt) workerWorkPool[10];
-    static QF_MPOOL_EL(NetworkConfigEvt) networkConfigPool[5];
     static QF_MPOOL_EL(SystemHealthEvt) systemHealthPool[5];
     
     QF_poolInit(sensorDataPool, sizeof(sensorDataPool), sizeof(SensorDataEvt));
     QF_poolInit(processorResultPool, sizeof(processorResultPool), sizeof(ProcessorResultEvt));
     QF_poolInit(workerWorkPool, sizeof(workerWorkPool), sizeof(WorkerWorkEvt));
-    QF_poolInit(networkConfigPool, sizeof(networkConfigPool), sizeof(NetworkConfigEvt));
     QF_poolInit(systemHealthPool, sizeof(systemHealthPool), sizeof(SystemHealthEvt));
     
     /* Construct all objects */
@@ -494,7 +460,7 @@ void QXKDemo_init(void) {
 /*==========================================================================*/
 /* QPC Demo Startup */
 /*==========================================================================*/
-int qxk_demo_start(void) {
+int qactive_demo_start(void) {
     /* Event queue storage */
     static QEvt const *sensorQueue[10];
     static QEvt const *processorQueue[10];
@@ -511,7 +477,7 @@ int qxk_demo_start(void) {
     QF_init();
     
     /* Initialize the demo */
-    QXKDemo_init();
+    QActiveDemo_init();
     
     /* Start active objects */
     QACTIVE_START(AO_Sensor,
@@ -553,20 +519,14 @@ int qxk_demo_start(void) {
 }
 
 /* RT-Thread MSH command exports */
-MSH_CMD_EXPORT(qxk_demo_start, start QPC demo with 4 AOs and RT-Thread integration);
-
-/* Manual trigger function for explicit start */
-static int qxk_demo_manual_start(void) {
-    rt_kprintf("=== QPC Demo Manual Start ===\n");
-    return qxk_demo_start();
-}
+MSH_CMD_EXPORT(qactive_demo_start, start QPC demo with 4 AOs and RT-Thread integration);
 
 /* RT-Thread application auto-initialization */
-static int qxk_demo_init(void) {
+static int qactive_demo_init(void) {
     rt_kprintf("=== QPC Demo Auto-Initialize ===\n");
-    return qxk_demo_start();
+    return qactive_demo_start();
 }
-INIT_APP_EXPORT(qxk_demo_init);
+INIT_APP_EXPORT(qactive_demo_init);
 
 #endif /* RT_USING_FINSH */
 #endif /* QPC_USING_QXK_DEMO */

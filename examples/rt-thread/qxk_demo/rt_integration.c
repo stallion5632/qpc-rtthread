@@ -32,12 +32,9 @@
 
 #ifdef QPC_USING_QXK_DEMO
 
-Q_DEFINE_THIS_FILE
-
 /*==========================================================================*/
 /* Global RT-Thread Synchronization Objects */
 /*==========================================================================*/
-rt_mq_t g_network_queue = RT_NULL;
 rt_mutex_t g_config_mutex = RT_NULL;
 rt_sem_t g_storage_sem = RT_NULL;
 rt_event_t g_system_event = RT_NULL;
@@ -46,8 +43,7 @@ rt_event_t g_system_event = RT_NULL;
 /* Shared Data Structures */
 /*==========================================================================*/
 SharedConfig g_shared_config = {
-    .sensor_rate = 200,      /* Default 2 second intervals */
-    .network_interval = 500, /* Default 5 second intervals */
+    .sensor_rate = 200,       /* Default 2 second intervals */
     .storage_interval = 1000, /* Default 10 second intervals */
     .system_flags = 0
 };
@@ -57,71 +53,8 @@ SystemStats g_system_stats = {0};
 /*==========================================================================*/
 /* RT-Thread Thread Handles */
 /*==========================================================================*/
-rt_thread_t network_thread = RT_NULL;
 rt_thread_t storage_thread = RT_NULL;
 rt_thread_t shell_thread = RT_NULL;
-
-/*==========================================================================*/
-/* Network Thread Implementation */
-/*==========================================================================*/
-void network_thread_entry(void *parameter) {
-    NetworkDataEvt *msg;
-    rt_uint32_t events;
-    
-    (void)parameter;
-    
-    rt_kprintf("Network: Thread started - Simulating Wi-Fi/Ethernet connectivity\n");
-    
-    /* Signal that network is ready */
-    rt_event_send(g_system_event, RT_EVENT_NETWORK_READY);
-    
-    /* Main network loop */
-    while (1) {
-        /* Wait for data from message queue with timeout */
-        if (rt_mq_recv(g_network_queue, (void*)&msg, sizeof(NetworkDataEvt*), 
-                      g_shared_config.network_interval) == RT_EOK) {
-            
-            rt_kprintf("Network: Received data %u from source %u, transmitting to cloud\n", 
-                      msg->data, msg->source_id);
-            
-            /* Simulate network transmission delay */
-            rt_thread_mdelay(50);
-            
-            /* Update statistics */
-            rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-            g_system_stats.network_transmissions++;
-            rt_mutex_release(g_config_mutex);
-            
-            rt_kprintf("Network: Data transmitted successfully (total: %u)\n", 
-                      g_system_stats.network_transmissions);
-            
-            /* Send notification that data was sent */
-            rt_event_send(g_system_event, RT_EVENT_DATA_AVAILABLE);
-            
-            /* Free the message */
-            rt_free(msg);
-        }
-        
-        /* Check for configuration updates */
-        if (rt_event_recv(g_system_event, RT_EVENT_CONFIG_UPDATED, 
-                         RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR, 
-                         0, &events) == RT_EOK) {
-            rt_kprintf("Network: Configuration updated, new interval = %u\n", 
-                      g_shared_config.network_interval);
-            
-            /* Send config update to QXK Processor */
-            NetworkConfigEvt *config_evt = Q_NEW(NetworkConfigEvt, NETWORK_CONFIG_SIG);
-            config_evt->sensor_rate = g_shared_config.sensor_rate;
-            config_evt->network_interval = g_shared_config.network_interval;
-            config_evt->storage_interval = g_shared_config.storage_interval;
-            
-            QACTIVE_POST(AO_Processor, &config_evt->super, network_thread);
-        }
-        
-        /* Periodic health check */
-        rt_thread_mdelay(100);
-    }
-}
 
 /*==========================================================================*/
 /* Storage Thread Implementation */
@@ -196,7 +129,7 @@ void shell_thread_entry(void *parameter) {
         rt_uint32_t events;
         
         if (rt_event_recv(g_system_event, 
-                         RT_EVENT_NETWORK_READY | RT_EVENT_STORAGE_READY | 
+                         RT_EVENT_STORAGE_READY | 
                          RT_EVENT_QXK_READY | RT_EVENT_HEALTH_CHECK,
                          RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
                          1000, &events) == RT_EOK) {
@@ -216,13 +149,6 @@ void shell_thread_entry(void *parameter) {
 /*==========================================================================*/
 int rt_integration_init(void) {
     rt_kprintf("RT-Integration: Initializing RT-Thread components\n");
-    
-    /* Create message queue for network data */
-    g_network_queue = rt_mq_create("net_mq", sizeof(NetworkDataEvt*), 10, RT_IPC_FLAG_FIFO);
-    if (g_network_queue == RT_NULL) {
-        rt_kprintf("RT-Integration: Failed to create network message queue\n");
-        return -1;
-    }
     
     /* Create mutex for shared configuration */
     g_config_mutex = rt_mutex_create("cfg_mutex", RT_IPC_FLAG_FIFO);
@@ -252,19 +178,9 @@ int rt_integration_init(void) {
 int rt_integration_start(void) {
     rt_kprintf("RT-Integration: Starting RT-Thread components\n");
     
-    /* Create and start network thread */
-    network_thread = rt_thread_create("network", network_thread_entry, RT_NULL,
-                                     2048, 10, 10);
-    if (network_thread != RT_NULL) {
-        rt_thread_startup(network_thread);
-    } else {
-        rt_kprintf("RT-Integration: Failed to create network thread\n");
-        return -1;
-    }
-    
     /* Create and start storage thread */
     storage_thread = rt_thread_create("storage", storage_thread_entry, RT_NULL,
-                                     2048, 11, 10);
+                                     2048, 10, 10);
     if (storage_thread != RT_NULL) {
         rt_thread_startup(storage_thread);
     } else {
@@ -274,7 +190,7 @@ int rt_integration_start(void) {
     
     /* Create and start shell thread */
     shell_thread = rt_thread_create("shell", shell_thread_entry, RT_NULL,
-                                   1024, 12, 10);
+                                   1024, 11, 10);
     if (shell_thread != RT_NULL) {
         rt_thread_startup(shell_thread);
     } else {
@@ -343,7 +259,6 @@ int qxk_stats_cmd(int argc, char** argv) {
     rt_kprintf("=== QXK Demo System Statistics ===\n");
     rt_kprintf("Sensor Readings:       %u\n", stats.sensor_readings);
     rt_kprintf("Processed Data:        %u\n", stats.processed_data);
-    rt_kprintf("Network Transmissions: %u\n", stats.network_transmissions);
     rt_kprintf("Storage Saves:         %u\n", stats.storage_saves);
     rt_kprintf("Health Checks:         %u\n", stats.health_checks);
     rt_kprintf("Errors:                %u\n", stats.errors);
@@ -354,10 +269,9 @@ int qxk_stats_cmd(int argc, char** argv) {
 
 int qxk_config_cmd(int argc, char** argv) {
     if (argc < 2) {
-        rt_kprintf("Usage: qxk_config <sensor_rate> [network_interval] [storage_interval]\n");
-        rt_kprintf("Current config: sensor=%u, network=%u, storage=%u\n",
+        rt_kprintf("Usage: qxk_config <sensor_rate> [storage_interval]\n");
+        rt_kprintf("Current config: sensor=%u, storage=%u\n",
                   g_shared_config.sensor_rate,
-                  g_shared_config.network_interval,
                   g_shared_config.storage_interval);
         return 0;
     }
@@ -368,10 +282,7 @@ int qxk_config_cmd(int argc, char** argv) {
         g_shared_config.sensor_rate = atoi(argv[1]);
     }
     if (argc >= 3) {
-        g_shared_config.network_interval = atoi(argv[2]);
-    }
-    if (argc >= 4) {
-        g_shared_config.storage_interval = atoi(argv[3]);
+        g_shared_config.storage_interval = atoi(argv[2]);
     }
     
     rt_mutex_release(g_config_mutex);
@@ -379,9 +290,8 @@ int qxk_config_cmd(int argc, char** argv) {
     /* Signal configuration update */
     rt_event_send(g_system_event, RT_EVENT_CONFIG_UPDATED);
     
-    rt_kprintf("QXK: Configuration updated - sensor=%u, network=%u, storage=%u\n",
+    rt_kprintf("QXK: Configuration updated - sensor=%u, storage=%u\n",
               g_shared_config.sensor_rate,
-              g_shared_config.network_interval,
               g_shared_config.storage_interval);
     
     return 0;
@@ -392,7 +302,6 @@ int system_status_cmd(int argc, char** argv) {
     (void)argv;
     
     rt_kprintf("=== System Status ===\n");
-    rt_kprintf("Network Thread:  %s\n", (network_thread != RT_NULL) ? "Running" : "Stopped");
     rt_kprintf("Storage Thread:  %s\n", (storage_thread != RT_NULL) ? "Running" : "Stopped");
     rt_kprintf("Shell Thread:    %s\n", (shell_thread != RT_NULL) ? "Running" : "Stopped");
     
