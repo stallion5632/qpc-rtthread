@@ -33,7 +33,7 @@
 #ifdef QPC_USING_QACTIVE_DEMO
 
 /* QP/C module definition */
-#define Q_this_module_ "main"
+Q_DEFINE_THIS_FILE
 #define MAX_PUB_SIG 32U  /* maximum number of published signals */
 static QSubscrList subscrSto[MAX_PUB_SIG];
 
@@ -394,20 +394,13 @@ static void cmd_qactive_control(int argc, char **argv)
     }
 
     if (rt_strcmp(argv[1], "start") == 0) {
-        qactive_start_cmd();
+        qactive_start_cmd(argc, argv);
     } else if (rt_strcmp(argv[1], "stop") == 0) {
-        qactive_stop_cmd();
+        qactive_stop_cmd(argc, argv);
     } else if (rt_strcmp(argv[1], "stats") == 0) {
-        qactive_stats_cmd();
+        qactive_stats_cmd(argc, argv);
     } else if (rt_strcmp(argv[1], "config") == 0) {
-        if (argc >= 5) {
-            int sensor_rate = rt_atoi(argv[2]);
-            int storage_interval = rt_atoi(argv[3]);
-            int flags = rt_atoi(argv[4]);
-            qactive_config_cmd(sensor_rate, storage_interval, flags);
-        } else {
-            rt_kprintf("Usage: qactive_control config <sensor_rate> <storage_interval> <flags>\n");
-        }
+        qactive_config_cmd(argc, argv);
     } else {
         rt_kprintf("Unknown command: %s\n", argv[1]);
     }

@@ -32,6 +32,8 @@
 
 #ifdef QPC_USING_QACTIVE_DEMO
 
+Q_DEFINE_THIS_FILE
+
 /*==========================================================================*/
 /* Global RT-Thread Synchronization Objects */
 /*==========================================================================*/
@@ -268,8 +270,8 @@ int qactive_stats_cmd(int argc, char** argv) {
 }
 
 int qactive_config_cmd(int argc, char** argv) {
-    if (argc < 2) {
-        rt_kprintf("Usage: qactive_config <sensor_rate> [storage_interval]\n");
+    if (argc < 3) {
+        rt_kprintf("Usage: qactive_control config <sensor_rate> <storage_interval> [flags]\n");
         rt_kprintf("Current config: sensor=%u, storage=%u\n",
                   g_shared_config.sensor_rate,
                   g_shared_config.storage_interval);
@@ -278,11 +280,14 @@ int qactive_config_cmd(int argc, char** argv) {
     
     rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
     
-    if (argc >= 2) {
-        g_shared_config.sensor_rate = atoi(argv[1]);
-    }
     if (argc >= 3) {
-        g_shared_config.storage_interval = atoi(argv[2]);
+        g_shared_config.sensor_rate = atoi(argv[2]);
+    }
+    if (argc >= 4) {
+        g_shared_config.storage_interval = atoi(argv[3]);
+    }
+    if (argc >= 5) {
+        g_shared_config.system_flags = atoi(argv[4]);
     }
     
     rt_mutex_release(g_config_mutex);
@@ -290,9 +295,10 @@ int qactive_config_cmd(int argc, char** argv) {
     /* Signal configuration update */
     rt_event_send(g_system_event, RT_EVENT_CONFIG_UPDATED);
     
-    rt_kprintf("QActive: Configuration updated - sensor=%u, storage=%u\n",
+    rt_kprintf("QActive: Configuration updated - sensor=%u, storage=%u, flags=%u\n",
               g_shared_config.sensor_rate,
-              g_shared_config.storage_interval);
+              g_shared_config.storage_interval,
+              g_shared_config.system_flags);
     
     return 0;
 }

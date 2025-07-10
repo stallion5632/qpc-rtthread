@@ -147,11 +147,11 @@ void rt_integration_get_stats(SystemStats *stats);
 /*==========================================================================*/
 /* MSH Command Prototypes */
 /*==========================================================================*/
-/* QXK control commands */
-int qxk_start_cmd(int argc, char** argv);
-int qxk_stop_cmd(int argc, char** argv);
-int qxk_stats_cmd(int argc, char** argv);
-int qxk_config_cmd(int argc, char** argv);
+/* QActive control commands */
+int qactive_start_cmd(int argc, char** argv);
+int qactive_stop_cmd(int argc, char** argv);
+int qactive_stats_cmd(int argc, char** argv);
+int qactive_config_cmd(int argc, char** argv);
 
 /* System control commands */
 int system_status_cmd(int argc, char** argv);
