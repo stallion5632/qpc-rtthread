@@ -36,13 +36,11 @@
 /* QActive Demo Signals */
 /*==========================================================================*/
 enum QActiveDemoSignals {
-    SENSOR_READ_SIG = Q_USER_SIG,
+    SENSOR_TIMEOUT_SIG = Q_USER_SIG,
     SENSOR_DATA_SIG,
-    PROCESSOR_START_SIG,
-    PROCESSOR_RESULT_SIG,
+    PROCESSOR_CONFIG_SIG,
     WORKER_WORK_SIG,
-    MONITOR_CHECK_SIG,
-    TIMEOUT_SIG,
+    MONITOR_TIMEOUT_SIG,
     
     MAX_DEMO_SIG
 };
@@ -52,17 +50,22 @@ enum QActiveDemoSignals {
 /*==========================================================================*/
 typedef struct {
     QEvt super;
-    uint32_t data;
+    uint32_t temperature;
+    uint32_t pressure;
+    uint32_t timestamp;
 } SensorDataEvt;
 
 typedef struct {
     QEvt super;
-    uint32_t result;
-} ProcessorResultEvt;
+    uint32_t sensor_rate;
+    uint32_t storage_interval;
+} ProcessorConfigEvt;
 
 typedef struct {
     QEvt super;
-    uint32_t work_id;
+    uint32_t data_id;
+    uint32_t data_size;
+    uint32_t priority;
 } WorkerWorkEvt;
 
 /*==========================================================================*/
@@ -76,7 +79,9 @@ extern QActive * const AO_Monitor;
 /*==========================================================================*/
 /* QActive Demo Functions */
 /*==========================================================================*/
-void QActiveDemo_init(void);
-int qactive_demo_start(void);
+void SensorAO_ctor(void);
+void ProcessorAO_ctor(void);
+void WorkerAO_ctor(void);
+void MonitorAO_ctor(void);
 
 #endif /* QACTIVE_DEMO_H_ */

@@ -30,7 +30,7 @@
 #define RT_INTEGRATION_H_
 
 #include <rtthread.h>
-#include "qxk_demo.h"
+#include "qactive_demo.h"
 
 /*==========================================================================*/
 /* RT-Thread Integration Signals */

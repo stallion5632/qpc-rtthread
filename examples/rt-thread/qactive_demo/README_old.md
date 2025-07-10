@@ -1,26 +1,24 @@
-# QXK Demo for RT-Thread
+# QActive Demo for RT-Thread
 
-This directory contains a comprehensive demonstration of the QXK (preemptive dual-mode kernel) running on RT-Thread with native RT-Thread integration.
+This directory contains a comprehensive demonstration of QPC Active Objects (QActive) running on RT-Thread with native RT-Thread integration.
 
 ## Overview
 
-The QXK demo showcases the integration of QPC's active objects (QActive) with QXK's extended threads (QXThread) and RT-Thread native threads in a real-world IoT gateway scenario. The demo implements an industrial data logging system that demonstrates practical integration patterns between QPC/QXK and RT-Thread domains.
+The QActive demo showcases the integration of QPC's active objects (QActive) with RT-Thread native threads in a real-world IoT gateway scenario. The demo implements an industrial data logging system that demonstrates practical integration patterns between QPC/QActive and RT-Thread domains.
 
 ## Architecture
 
-### QXK Components (QPC Framework)
+### QActive Components (QPC Framework)
 1. **Sensor AO**: Periodically reads sensor data and publishes it
 2. **Processor AO**: Processes received sensor data, handles configuration updates
-3. **Worker Thread**: Handles background data compression and processing
-4. **Monitor Thread**: Performs periodic system health monitoring
+3. **Worker AO**: Handles background data compression and processing
+4. **Monitor AO**: Performs periodic system health monitoring
 
 ### RT-Thread Components (Native RT-Thread)
-1. **Network Thread**: Simulates Wi-Fi/Ethernet connectivity, sends data to "cloud"
-2. **Storage Thread**: Manages local data storage operations
-3. **Shell Thread**: Provides RT-Thread MSH commands for system control
+1. **Storage Thread**: Manages local data storage operations
+2. **Shell Thread**: Provides RT-Thread MSH commands for system control
 
 ### Synchronization Objects
-- **Message Queue**: RT-Thread message queue for QXK → RT-Thread data transfer
 - **Mutex**: RT-Thread mutex for shared configuration protection
 - **Semaphore**: RT-Thread semaphore for storage coordination
 - **Event Set**: RT-Thread event set for system-wide notifications

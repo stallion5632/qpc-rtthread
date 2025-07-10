@@ -30,7 +30,7 @@
 #include <finsh.h>
 #include <stdlib.h>
 
-#ifdef QPC_USING_QXK_DEMO
+#ifdef QPC_USING_QACTIVE_DEMO
 
 /*==========================================================================*/
 /* Global RT-Thread Synchronization Objects */
@@ -336,4 +336,4 @@ MSH_CMD_EXPORT(qactive_config_cmd, Configure QActive parameters);
 MSH_CMD_EXPORT(system_status_cmd, Show system status);
 MSH_CMD_EXPORT(system_reset_cmd, Reset system statistics);
 
-#endif /* QPC_USING_QXK_DEMO */
+#endif /* QPC_USING_QACTIVE_DEMO */
