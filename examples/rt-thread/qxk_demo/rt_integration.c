@@ -1,5 +1,5 @@
 /*============================================================================
-* Product: QXK Demo RT-Thread Integration Implementation
+* Product: QActive Demo RT-Thread Integration Implementation
 * Last updated for version 7.2.0
 * Last updated on  2024-12-19
 *
@@ -130,7 +130,7 @@ void shell_thread_entry(void *parameter) {
         
         if (rt_event_recv(g_system_event, 
                          RT_EVENT_STORAGE_READY | 
-                         RT_EVENT_QXK_READY | RT_EVENT_HEALTH_CHECK,
+                         RT_EVENT_QACTIVE_READY | RT_EVENT_HEALTH_CHECK,
                          RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
                          1000, &events) == RT_EOK) {
             
@@ -222,11 +222,11 @@ void rt_integration_get_stats(SystemStats *stats) {
 /*==========================================================================*/
 /* MSH Command Implementations */
 /*==========================================================================*/
-int qxk_start_cmd(int argc, char** argv) {
+int qactive_start_cmd(int argc, char** argv) {
     (void)argc;
     (void)argv;
     
-    rt_kprintf("QXK: Starting QXK components\n");
+    rt_kprintf("QActive: Starting QActive components\n");
     
     /* Send start signal to sensor */
     QACTIVE_POST(AO_Sensor, Q_NEW(QEvt, SENSOR_READ_SIG), shell_thread);
@@ -234,29 +234,29 @@ int qxk_start_cmd(int argc, char** argv) {
     /* Send start signal to processor */
     QACTIVE_POST(AO_Processor, Q_NEW(QEvt, PROCESSOR_START_SIG), shell_thread);
     
-    rt_kprintf("QXK: Start commands sent to QXK components\n");
+    rt_kprintf("QActive: Start commands sent to QActive components\n");
     return 0;
 }
 
-int qxk_stop_cmd(int argc, char** argv) {
+int qactive_stop_cmd(int argc, char** argv) {
     (void)argc;
     (void)argv;
     
-    rt_kprintf("QXK: Stopping QXK components (simulation)\n");
+    rt_kprintf("QActive: Stopping QActive components (simulation)\n");
     
     /* In a real implementation, this would send stop signals */
-    rt_kprintf("QXK: Stop simulation completed\n");
+    rt_kprintf("QActive: Stop simulation completed\n");
     return 0;
 }
 
-int qxk_stats_cmd(int argc, char** argv) {
+int qactive_stats_cmd(int argc, char** argv) {
     (void)argc;
     (void)argv;
     
     SystemStats stats;
     rt_integration_get_stats(&stats);
     
-    rt_kprintf("=== QXK Demo System Statistics ===\n");
+    rt_kprintf("=== QActive Demo System Statistics ===\n");
     rt_kprintf("Sensor Readings:       %u\n", stats.sensor_readings);
     rt_kprintf("Processed Data:        %u\n", stats.processed_data);
     rt_kprintf("Storage Saves:         %u\n", stats.storage_saves);
@@ -267,9 +267,9 @@ int qxk_stats_cmd(int argc, char** argv) {
     return 0;
 }
 
-int qxk_config_cmd(int argc, char** argv) {
+int qactive_config_cmd(int argc, char** argv) {
     if (argc < 2) {
-        rt_kprintf("Usage: qxk_config <sensor_rate> [storage_interval]\n");
+        rt_kprintf("Usage: qactive_config <sensor_rate> [storage_interval]\n");
         rt_kprintf("Current config: sensor=%u, storage=%u\n",
                   g_shared_config.sensor_rate,
                   g_shared_config.storage_interval);
@@ -290,7 +290,7 @@ int qxk_config_cmd(int argc, char** argv) {
     /* Signal configuration update */
     rt_event_send(g_system_event, RT_EVENT_CONFIG_UPDATED);
     
-    rt_kprintf("QXK: Configuration updated - sensor=%u, storage=%u\n",
+    rt_kprintf("QActive: Configuration updated - sensor=%u, storage=%u\n",
               g_shared_config.sensor_rate,
               g_shared_config.storage_interval);
     
@@ -329,10 +329,10 @@ int system_reset_cmd(int argc, char** argv) {
 }
 
 /* RT-Thread MSH command exports */
-MSH_CMD_EXPORT(qxk_start_cmd, Start QXK components);
-MSH_CMD_EXPORT(qxk_stop_cmd, Stop QXK components);
-MSH_CMD_EXPORT(qxk_stats_cmd, Show QXK system statistics);
-MSH_CMD_EXPORT(qxk_config_cmd, Configure QXK parameters);
+MSH_CMD_EXPORT(qactive_start_cmd, Start QActive components);
+MSH_CMD_EXPORT(qactive_stop_cmd, Stop QActive components);
+MSH_CMD_EXPORT(qactive_stats_cmd, Show QActive system statistics);
+MSH_CMD_EXPORT(qactive_config_cmd, Configure QActive parameters);
 MSH_CMD_EXPORT(system_status_cmd, Show system status);
 MSH_CMD_EXPORT(system_reset_cmd, Reset system statistics);
 

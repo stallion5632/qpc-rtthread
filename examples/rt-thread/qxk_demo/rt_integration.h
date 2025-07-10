@@ -1,5 +1,5 @@
 /*============================================================================
-* Product: QXK Demo RT-Thread Integration Header
+* Product: QActive Demo RT-Thread Integration Header
 * Last updated for version 7.2.0
 * Last updated on  2024-12-19
 *
@@ -138,7 +138,7 @@ void rt_integration_get_stats(SystemStats *stats);
 /*==========================================================================*/
 #define RT_EVENT_STORAGE_READY     (1 << 0)
 #define RT_EVENT_SHELL_READY       (1 << 1)
-#define RT_EVENT_QXK_READY         (1 << 2)
+#define RT_EVENT_QACTIVE_READY     (1 << 2)
 #define RT_EVENT_SYSTEM_ERROR      (1 << 3)
 #define RT_EVENT_CONFIG_UPDATED    (1 << 4)
 #define RT_EVENT_DATA_AVAILABLE    (1 << 5)

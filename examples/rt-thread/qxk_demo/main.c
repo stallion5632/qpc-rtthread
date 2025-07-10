@@ -436,12 +436,17 @@ static QState MonitorAO_active(MonitorAO * const me, QEvt const * const e) {
 /* QPC Demo Initialization */
 /*==========================================================================*/
 void QActiveDemo_init(void) {
+    /* Initialize small memory pool for QF internal use */
+    static QF_MPOOL_EL(QEvt) smallPool[20];
+    
     /* Initialize event pools */
     static QF_MPOOL_EL(SensorDataEvt) sensorDataPool[10];
     static QF_MPOOL_EL(ProcessorResultEvt) processorResultPool[10];
     static QF_MPOOL_EL(WorkerWorkEvt) workerWorkPool[10];
     static QF_MPOOL_EL(SystemHealthEvt) systemHealthPool[5];
     
+    /* Initialize memory pools - smallest first */
+    QF_poolInit(smallPool, sizeof(smallPool), sizeof(QEvt));
     QF_poolInit(sensorDataPool, sizeof(sensorDataPool), sizeof(SensorDataEvt));
     QF_poolInit(processorResultPool, sizeof(processorResultPool), sizeof(ProcessorResultEvt));
     QF_poolInit(workerWorkPool, sizeof(workerWorkPool), sizeof(WorkerWorkEvt));
@@ -505,15 +510,15 @@ int qactive_demo_start(void) {
                   monitorStack, sizeof(monitorStack),
                   (void *)0);
     
-    rt_kprintf("QXK Demo: Started - 4 QActive objects (Sensor, Processor, Worker, Monitor)\n");
+    rt_kprintf("QActive Demo: Started - 4 QActive objects (Sensor, Processor, Worker, Monitor)\n");
     
     /* Start RT-Thread integration components */
     rt_integration_start();
     
-    /* Signal that QXK is ready */
-    rt_event_send(g_system_event, RT_EVENT_QXK_READY);
+    /* Signal that QActive demo is ready */
+    rt_event_send(g_system_event, RT_EVENT_QACTIVE_READY);
     
-    rt_kprintf("QXK Demo: RT-Thread integration started - 3 RT-Thread threads + 4 QActive objects\n");
+    rt_kprintf("QActive Demo: RT-Thread integration started - 2 RT-Thread threads + 4 QActive objects\n");
     
     return QF_run(); /* Run the QF application */
 }
