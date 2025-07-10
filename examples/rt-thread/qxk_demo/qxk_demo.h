@@ -70,6 +70,8 @@ typedef struct {
 /*==========================================================================*/
 extern QActive * const AO_Sensor;
 extern QActive * const AO_Processor;
+extern QActive * const AO_Worker;
+extern QActive * const AO_Monitor;
 
 /*==========================================================================*/
 /* QXK Demo Functions */
