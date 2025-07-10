@@ -154,22 +154,13 @@ void storage_thread_entry(void *parameter) {
         /* Update statistics */
         rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
         g_system_stats.storage_saves++;
-        
-        /* Coordinate with QXK Monitor for health check */
-        SystemHealthEvt *health_evt = Q_NEW(SystemHealthEvt, SYSTEM_HEALTH_SIG);
-        health_evt->system_status = (g_system_stats.errors == 0) ? 1 : 0;
-        health_evt->qxk_health = 1; /* Assume QXK is healthy */
-        health_evt->rt_health = 1;  /* RT-Thread is healthy */
         rt_mutex_release(g_config_mutex);
-        
-        rt_kprintf("Storage: Save completed (total: %u), health status: %u\n", 
-                  g_system_stats.storage_saves, health_evt->system_status);
+
+        rt_kprintf("Storage: Save completed (total: %u)\n", 
+                  g_system_stats.storage_saves);
         
         /* Send health update to system */
         rt_event_send(g_system_event, RT_EVENT_HEALTH_CHECK);
-        
-        /* Free the health event */
-        Q_GC(&health_evt->super);
         
         /* Check for system events */
         if (rt_event_recv(g_system_event, RT_EVENT_SYSTEM_ERROR, 

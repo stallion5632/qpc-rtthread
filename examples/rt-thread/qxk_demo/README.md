@@ -148,3 +148,44 @@ This demo illustrates:
 - [QPC Documentation](https://www.state-machine.com/qpc)
 - [QXK Kernel Guide](https://www.state-machine.com/qpc/qxk.html)
 - [RT-Thread Documentation](https://www.rt-thread.org/document/site/)
+
+## Implementation Details
+
+### Synchronization Architecture
+```
+QXK Domain                    RT-Thread Domain
+┌─────────────────┐          ┌─────────────────┐
+│   Sensor AO     │          │ Network Thread  │
+│   Processor AO  │◄────────►│ Storage Thread  │
+│   Worker Thread │          │ Shell Thread    │
+│   Monitor Thread│          │                 │
+└─────────────────┘          └─────────────────┘
+        │                              │
+        └──────────────────────────────┘
+              Shared Resources:
+              • RT-Thread Message Queue
+              • RT-Thread Mutex  
+              • RT-Thread Semaphore
+              • RT-Thread Event Set
+              • Protected Statistics
+```
+
+### Data Flow Example
+1. **Sensor Reading**: Sensor AO generates data (e.g., temperature = 25.6°C)
+2. **Processing**: Processor AO validates and processes data
+3. **Compression**: Worker QXThread compresses data for transmission
+4. **Network Transfer**: RT-Thread Network thread simulates cloud upload
+5. **Storage**: RT-Thread Storage thread saves data locally
+6. **Monitoring**: QXK Monitor and RT-Thread Storage coordinate health checks
+7. **Configuration**: RT-Thread Network receives config updates, sends to QXK Processor
+
+### Thread Priorities
+- **QXK Sensor AO**: Priority 1 (highest)
+- **QXK Processor AO**: Priority 2
+- **QXK Worker Thread**: Priority 3
+- **QXK Monitor Thread**: Priority 4
+- **RT-Thread Network**: Priority 10 (lower)
+- **RT-Thread Storage**: Priority 11
+- **RT-Thread Shell**: Priority 12 (lowest)
+
+This priority scheme ensures QXK components have higher priority for real-time processing, while RT-Thread components handle background operations.

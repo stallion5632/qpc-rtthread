@@ -44,12 +44,6 @@ enum QXKDemoSignals {
     MONITOR_CHECK_SIG,
     TIMEOUT_SIG,
     
-    /* RT-Thread Integration signals */
-    NETWORK_CONFIG_SIG,
-    NETWORK_DATA_SIG,
-    STORAGE_SAVE_SIG,
-    SYSTEM_HEALTH_SIG,
-    
     MAX_DEMO_SIG
 };
 
