@@ -32,6 +32,10 @@
 #include "qpc.h"
 #include <rtthread.h>
 
+#ifdef QPC_USING_QXK
+#include "qxk.h"
+#endif
+
 /*==========================================================================*/
 /* Performance Test Signal Definitions - Using distinct Q_USER_SIG offsets */
 /*==========================================================================*/
