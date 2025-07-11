@@ -61,6 +61,7 @@ typedef struct {
     QEvt super;
     uint32_t sensor_rate;
     uint32_t storage_interval;
+    uint32_t margin;  /* Align by 16 bytes */
 } ProcessorConfigEvt;
 
 typedef struct {
