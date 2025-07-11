@@ -1,5 +1,5 @@
 /*============================================================================
-* Product: QActive Demo for RT-Thread
+* Product: QActive Demo for RT-Thread - Enhanced Version (superset of lite)
 * Last updated for version 7.2.0
 * Last updated on  2024-12-19
 *
@@ -33,42 +33,54 @@
 #include <rtthread.h>
 
 /*==========================================================================*/
-/* QActive Demo Signals */
+/* QActive Demo Signals - Standardized from lite version */
 /*==========================================================================*/
 enum QActiveDemoSignals {
-    SENSOR_TIMEOUT_SIG = Q_USER_SIG,
+    SENSOR_READ_SIG = Q_USER_SIG,
     SENSOR_DATA_SIG,
-    SENSOR_READ_SIG,
-    PROCESSOR_CONFIG_SIG,
     PROCESSOR_START_SIG,
+    PROCESSOR_RESULT_SIG,
     WORKER_WORK_SIG,
+    MONITOR_CHECK_SIG,
+    TIMEOUT_SIG,
+    WORKER_TIMEOUT_SIG,
     MONITOR_TIMEOUT_SIG,
-    
+    /* Additional RT-Thread integration signals */
+    SENSOR_TIMEOUT_SIG,
+    PROCESSOR_CONFIG_SIG,
     MAX_DEMO_SIG
 };
 
 /*==========================================================================*/
-/* QActive Demo Events */
+/* QActive Demo Events - Unified from both versions */
 /*==========================================================================*/
+/* Primary data event (from lite version) */
 typedef struct {
     QEvt super;
-    uint32_t temperature;
-    uint32_t pressure;
-    uint32_t timestamp;
+    uint32_t data;
 } SensorDataEvt;
 
+/* Result event (from lite version) */
+typedef struct {
+    QEvt super;
+    uint32_t result;
+} ProcessorResultEvt;
+
+/* Work event (from lite version with RT-Thread extensions) */
+typedef struct {
+    QEvt super;
+    uint32_t work_id;
+    uint32_t data_size;     /* RT-Thread extension */
+    uint32_t priority;      /* RT-Thread extension */
+} WorkerWorkEvt;
+
+/* Configuration event (RT-Thread specific) */
 typedef struct {
     QEvt super;
     uint32_t sensor_rate;
     uint32_t storage_interval;
+    uint32_t system_flags;
 } ProcessorConfigEvt;
-
-typedef struct {
-    QEvt super;
-    uint32_t data_id;
-    uint32_t data_size;
-    uint32_t priority;
-} WorkerWorkEvt;
 
 /*==========================================================================*/
 /* Active Object Handles */
@@ -79,11 +91,9 @@ extern QActive * const AO_Worker;
 extern QActive * const AO_Monitor;
 
 /*==========================================================================*/
-/* QActive Demo Functions */
+/* QActive Demo Functions - Standardized naming */
 /*==========================================================================*/
-void SensorAO_ctor(void);
-void ProcessorAO_ctor(void);
-void WorkerAO_ctor(void);
-void MonitorAO_ctor(void);
+void QActiveDemo_init(void);
+int qactive_demo_start(void);
 
 #endif /* QACTIVE_DEMO_H_ */

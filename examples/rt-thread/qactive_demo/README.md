@@ -246,6 +246,42 @@ graph LR
 - **RT-Thread Threads**: Use RT-Thread's dynamic memory management
 - **Shared Resources**: Protected by RT-Thread synchronization primitives
 
+#### Event Pool Configuration
+The system uses three separate event pools organized by event size:
+
+| Event Pool | Event Types | Size | Count | Purpose |
+|------------|-------------|------|-------|---------|
+| basicEventPool | QEvt | 4 bytes | 50 | Basic signals (timeouts, commands) |
+| shared8Pool | SensorDataEvt, ProcessorResultEvt | 8 bytes | 60 | Data and result events |
+| worker16Pool | WorkerWorkEvt | 16 bytes | 40 | Work events with RT-Thread extensions |
+
+**Critical:** WorkerWorkEvt events require 16 bytes due to RT-Thread extensions (work_id, data_size, priority). Using incorrect pool size will cause Q_NEW() assertion failures.
+
+### Troubleshooting
+
+#### Common Issues
+
+**1. QF Dynamic Allocation Assertion Failed**
+```
+(qf_dyn) assertion failed at function:, line number:310
+```
+- **Cause**: Event size mismatch between requested event and available pool
+- **Solution**: Verify event pool configuration matches event struct sizes
+- **Check**: `sizeof(WorkerWorkEvt) = 16 bytes` requires 16-byte pool, not 8-byte pool
+
+**2. Missing Worker AO Logs**
+```
+[WorkerAO_idle] WORKER_WORK_SIG - Received work ID xxx
+[WorkerAO_working] WORKER_WORK_SIG - Additional work ID xxx
+```
+- **Cause**: WorkerWorkEvt allocation failure prevents event delivery
+- **Solution**: Ensure worker16Pool is properly initialized for 16-byte events
+
+**3. Event Pool Exhaustion**
+- **Symptoms**: Intermittent failures during high event load
+- **Solution**: Increase pool sizes or optimize event lifecycle
+- **Monitor**: Check pool usage during peak operation
+
 ### Error Handling
 - **Graceful Degradation**: Components continue operation even if some fail
 - **Error Reporting**: System errors are logged and reported via health monitoring
