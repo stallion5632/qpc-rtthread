@@ -294,8 +294,10 @@ int_t QF_run(void) {
     QS_END_PRE_()
 
     handle_evts(); /* handle all events posted so far */
+    PRINTF_S("[QF_run] handle_evts() called\n");
 
     if (l_currAO == (QActive*)0) { /* current AO not set? */
+        PRINTF_S("[QF_run] l_currAO not set, searching highest-prio AO\n");
         /* take the highest-priority registered AO */
         for (uint8_t p = QF_MAX_ACTIVE; p != 0U; --p) {
             if (QActive_registry_[p] != (QActive *)0) {
@@ -306,6 +308,7 @@ int_t QF_run(void) {
     }
     /* still not found? */
     if (l_currAO != (QActive*)0) {
+        PRINTF_S("[QF_run] l_currAO set to %p\n", l_currAO);
         extern Dictionary QSPY_objDict;
 
         char const* name = Dictionary_get(&QSPY_objDict,
@@ -323,6 +326,7 @@ int_t QF_run(void) {
 
     /* event loop... */
     for (;;) {
+        PRINTF_S("[QF_run] Waiting for user input in AO: %s\n", l_currAO_name);
         PRINTF_S("%s>", l_currAO_name);
         if (fgets(l_line, sizeof(l_line), stdin) != (char*)0) {
             if (l_line[0] == '\n') { /* <Enter>? */
@@ -340,6 +344,7 @@ int_t QF_run(void) {
 }
 
 /*--------------------------------------------------------------------------*/
+#if 0
 void QActive_start_(QActive* const me,
     QPrioSpec const prioSpec,
     QEvt const** const qSto,
@@ -348,17 +353,23 @@ void QActive_start_(QActive* const me,
     uint_fast16_t const stkSize,
     void const* const par)
 {
+    PRINTF_S("[QActive_start_] Starting AO: %p, prio: %u, pthre: %u\n", me, (uint8_t)(prioSpec & 0xFFU), (uint8_t)(prioSpec >> 8U));
+
     Q_UNUSED_PAR(stkSto);
     Q_UNUSED_PAR(stkSize);
 
     me->prio = (uint8_t)(prioSpec & 0xFFU); /* QF-priority of the AO */
     me->pthre = (uint8_t)(prioSpec >> 8U);   /* preemption-threshold */
     QActive_register_(me); /* make QF aware of this active object */
+    PRINTF_S("[QActive_start_] AO registered: %p\n", me);
 
     QEQueue_init(&me->eQueue, qSto, qLen); /* initialize the built-in queue */
+    PRINTF_S("[QActive_start_] AO queue initialized: %p\n", me);
 
     QHSM_INIT(&me->super, par, me->prio); /* the top-most initial tran. */
+    PRINTF_S("[QActive_start_] AO initial transition done: %p\n", me);
 }
+#endif
 /*..........................................................................*/
 #ifdef QF_ACTIVE_STOP
 void QActive_stop(QActive* const me) {

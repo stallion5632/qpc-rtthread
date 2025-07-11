@@ -69,9 +69,14 @@ void QF_stop(void) {
 static void thread_function(void *parameter) { /* RT-Thread signature */
     QActive *act = (QActive *)parameter;
 
+    rt_kprintf("[thread_function] AO thread started: %p, name: %s, prio: %d, stat: %d\n",
+               act, rt_thread_self()->name, rt_thread_self()->current_priority, rt_thread_self()->stat);
+
     /* event-loop */
     for (;;) { /* for-ever */
+        rt_kprintf("[thread_function] AO %p waiting for event...\n", act);
         QEvt const *e = QActive_get_(act);
+        rt_kprintf("[thread_function] AO %p got event: sig=%d\n", act, e->sig);
         QHSM_DISPATCH(&act->super, e, act->prio);
         QF_gc(e); /* check if the event is garbage, and collect it if so */
     }
@@ -82,40 +87,51 @@ void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
                     void * const stkSto, uint_fast16_t const stkSize,
                     void const * const par)
 {
+    rt_kprintf("[QActive_start_] Starting AO: %p, thread name: %s\n",
+               me, me->thread.name ? me->thread.name : "NULL");
+
     /* allege that the RT-Thread queue is created successfully */
-    Q_ALLEGE_ID(210,
-        rt_mb_init(&me->eQueue,
-            me->thread.name,
-            (void *)qSto,
-            (qLen),
-            RT_IPC_FLAG_FIFO)
-        == RT_EOK);
+    rt_err_t mb_result = rt_mb_init(&me->eQueue,
+        me->thread.name,
+        (void *)qSto,
+        (qLen),
+        RT_IPC_FLAG_FIFO);
+
+    rt_kprintf("[QActive_start_] Mailbox init result: %d\n", mb_result);
+    Q_ALLEGE_ID(210, mb_result == RT_EOK);
 
     me->prio  = (uint8_t)(prioSpec & 0xFFU); /* QF-priority */
     me->pthre = (uint8_t)(prioSpec >> 8U); /* preemption-threshold */
     QActive_register_(me); /* register this AO */
+    rt_kprintf("[QActive_start_] AO registered: %p\n", me);
 
     QHSM_INIT(&me->super, par, me->prio); /* initial tran. (virtual) */
     QS_FLUSH(); /* flush the trace buffer to the host */
+    rt_kprintf("[QActive_start_] QHSM initialized: %p\n", me);
 
-    Q_ALLEGE_ID(220,
-        rt_thread_init(
-            &me->thread, /* RT-Thread thread control block */
-            me->thread.name, /* unique thread name */
-            &thread_function, /* thread function */
-            me, /* thread parameter */
-            stkSto,    /* stack start */
-            stkSize,   /* stack size in bytes */
-            QF_MAX_ACTIVE - me->prio,   /* RT-Thread priority */
-            5)
-        == RT_EOK);
-    rt_thread_startup(&me->thread);
+    /* 动态创建 AO 线程，栈空间调整为 4096 字节 */
+    rt_thread_t ao_thread = rt_thread_create(
+        me->thread.name, /* unique thread name */
+        &thread_function, /* thread function */
+        me, /* thread parameter */
+        4096, /* stack size in bytes (推荐更大) */
+        QF_MAX_ACTIVE - me->prio, /* RT-Thread priority */
+        5);
+
+    rt_kprintf("[QActive_start_] rt_thread_create result: %p, prio: %d\n", ao_thread, QF_MAX_ACTIVE - me->prio);
+    Q_ALLEGE_ID(221, ao_thread != RT_NULL);
+
+    rt_err_t startup_result = rt_thread_startup(ao_thread);
+    rt_kprintf("[QActive_start_] Thread startup result: %d\n", startup_result);
+    rt_kprintf("[QActive_start_] Thread state: %d\n", ao_thread->stat);
 }
 /*..........................................................................*/
 void QActive_setAttr(QActive *const me, uint32_t attr1, void const *attr2) {
     /* this function must be called before QACTIVE_START(),
-    */
-    Q_REQUIRE_ID(300, me->thread.name == (char *)0);
+     * For RT-Thread, thread.name is a char array, not a pointer.
+     * 检查首字节是否为 0，表示未设置线程名。
+     */
+    Q_REQUIRE_ID(300, me->thread.name[0] == '\0');
     switch (attr1) {
         case THREAD_NAME_ATTR:
             rt_memset(me->thread.name, 0x00, RT_NAME_MAX);
@@ -140,7 +156,7 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
             QS_OBJ_PRE_(me);
             QS_STR_PRE_("FAST_PATH");
         QS_END_NOCRIT_PRE_()
-        
+
         /* Fast-path dispatch - direct call to state machine */
         QHSM_DISPATCH(&me->super, e, me->prio);
         return true;
