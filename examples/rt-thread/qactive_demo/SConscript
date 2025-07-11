@@ -3,7 +3,7 @@ from building import *
 
 cwd = GetCurrentDir()
 
-# QXK Demo source files
+# QActive Demo source files
 src = Split("""
 main.c
 """)
@@ -11,10 +11,10 @@ main.c
 # Include paths
 path = [cwd]
 
-# Define the QXK demo group
-# This group depends on QPC with QXK kernel support
-group = DefineGroup('qpc_qxk_demo', src, 
-                   depend = ['PKG_USING_QPC', 'QPC_USING_QXK_DEMO', 'RT_USING_FINSH'], 
+# Define the QActive demo group
+# This group depends on QPC without QXK kernel support
+group = DefineGroup('qpc_qactive_demo', src, 
+                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO', 'RT_USING_FINSH'], 
                    CPPPATH = path)
 
 Return('group')

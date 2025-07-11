@@ -1,5 +1,5 @@
 /*============================================================================
-* Product: QXK Demo for RT-Thread - Main Application
+* Product: QActive Demo for RT-Thread - Main Application
 * Last updated for version 7.2.0
 * Last updated on  2024-12-19
 *
@@ -28,7 +28,7 @@
 ============================================================================*/
 #include "qactive_demo.h"
 
-#ifdef QPC_USING_QXK_DEMO
+#ifdef QPC_USING_QACTIVE_DEMO
 #ifdef RT_USING_FINSH
 
 #include <finsh.h>
@@ -68,26 +68,37 @@ static QState ProcessorAO_idle(ProcessorAO * const me, QEvt const * const e);
 static QState ProcessorAO_processing(ProcessorAO * const me, QEvt const * const e);
 
 /*==========================================================================*/
-/* Worker QXThread */
+/* Worker Active Object */
 /*==========================================================================*/
 typedef struct {
-    QXThread super;
+    QActive super;
+    QTimeEvt timeEvt;
     uint32_t work_count;
-} WorkerThread;
+} WorkerAO;
 
-static WorkerThread l_workerThread;
-static void WorkerThread_run(QXThread * const me);
+static WorkerAO l_workerAO;
+QActive * const AO_Worker = &l_workerAO.super;
+
+/* Worker state functions */
+static QState WorkerAO_initial(WorkerAO * const me, QEvt const * const e);
+static QState WorkerAO_idle(WorkerAO * const me, QEvt const * const e);
+static QState WorkerAO_working(WorkerAO * const me, QEvt const * const e);
 
 /*==========================================================================*/
-/* Monitor QXThread */
+/* Monitor Active Object */
 /*==========================================================================*/
 typedef struct {
-    QXThread super;
+    QActive super;
+    QTimeEvt timeEvt;
     uint32_t check_count;
-} MonitorThread;
+} MonitorAO;
 
-static MonitorThread l_monitorThread;
-static void MonitorThread_run(QXThread * const me);
+static MonitorAO l_monitorAO;
+QActive * const AO_Monitor = &l_monitorAO.super;
+
+/* Monitor state functions */
+static QState MonitorAO_initial(MonitorAO * const me, QEvt const * const e);
+static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e);
 
 /*==========================================================================*/
 /* Sensor Active Object Implementation */
@@ -221,14 +232,14 @@ static QState ProcessorAO_processing(ProcessorAO * const me, QEvt const * const 
             /* Simulate processing time */
             uint32_t result = me->processed_count * 100;
             
-            /* Send result and notify worker thread */
+            /* Send result and notify worker AO */
             ProcessorResultEvt *evt = Q_NEW(ProcessorResultEvt, PROCESSOR_RESULT_SIG);
             evt->result = result;
             
-            /* Post work to worker thread */
+            /* Post work to worker AO */
             WorkerWorkEvt *work_evt = Q_NEW(WorkerWorkEvt, WORKER_WORK_SIG);
             work_evt->work_id = me->processed_count;
-            QACTIVE_POST((QActive *)&l_workerThread, &work_evt->super, me);
+            QACTIVE_POST(AO_Worker, &work_evt->super, me);
             
             status = Q_TRAN(&ProcessorAO_idle);
             break;
@@ -251,81 +262,163 @@ static QState ProcessorAO_processing(ProcessorAO * const me, QEvt const * const 
 }
 
 /*==========================================================================*/
-/* Worker QXThread Implementation */
+/* Worker Active Object Implementation */
 /*==========================================================================*/
-static void WorkerThread_ctor(void) {
-    WorkerThread *me = &l_workerThread;
+static void WorkerAO_ctor(void) {
+    WorkerAO *me = &l_workerAO;
     
-    QXThread_ctor(&me->super, &WorkerThread_run, 0);
+    QActive_ctor(&me->super, Q_STATE_CAST(&WorkerAO_initial));
+    QTimeEvt_ctorX(&me->timeEvt, &me->super, WORKER_TIMEOUT_SIG, 0U);
     me->work_count = 0;
 }
 
-static void WorkerThread_run(QXThread * const me) {
-    WorkerThread *wt = (WorkerThread *)me;
+static QState WorkerAO_initial(WorkerAO * const me, QEvt const * const e) {
+    (void)e;
     
-    rt_kprintf("Worker: Thread started\n");
+    /* Subscribe to worker signals */
+    QActive_subscribe(&me->super, WORKER_WORK_SIG);
     
-    for (;;) {
-        QEvt const *e = QXThread_queueGet(QXTHREAD_NO_TIMEOUT);
+    return Q_TRAN(&WorkerAO_idle);
+}
+
+static QState WorkerAO_idle(WorkerAO * const me, QEvt const * const e) {
+    QState status;
+    
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            rt_kprintf("Worker: Idle, waiting for work\n");
+            status = Q_HANDLED();
+            break;
+        }
         
-        if (e != (QEvt const *)0) {
-            switch (e->sig) {
-                case WORKER_WORK_SIG: {
-                    WorkerWorkEvt const *evt = (WorkerWorkEvt const *)e;
-                    wt->work_count++;
-                    rt_kprintf("Worker: Processing work ID %u (total: %u)\n", 
-                              evt->work_id, wt->work_count);
-                    
-                    /* Simulate work processing */
-                    QXThread_delay(50); /* 500ms delay */
-                    
-                    rt_kprintf("Worker: Work ID %u completed\n", evt->work_id);
-                    break;
-                }
-                
-                default: {
-                    rt_kprintf("Worker: Unknown signal %u\n", e->sig);
-                    break;
-                }
-            }
-            
-            Q_GC(e); /* Garbage collect the event */
+        case WORKER_WORK_SIG: {
+            WorkerWorkEvt const *evt = (WorkerWorkEvt const *)e;
+            rt_kprintf("Worker: Received work ID %u\n", evt->work_id);
+            status = Q_TRAN(&WorkerAO_working);
+            break;
+        }
+        
+        default: {
+            status = Q_SUPER(&QHsm_top);
+            break;
         }
     }
+    
+    return status;
+}
+
+static QState WorkerAO_working(WorkerAO * const me, QEvt const * const e) {
+    QState status;
+    
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            me->work_count++;
+            rt_kprintf("Worker: Processing work (total: %u)\n", me->work_count);
+            
+            /* Simulate work processing with timeout */
+            QTimeEvt_armX(&me->timeEvt, 50, 0); /* 500ms delay */
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case WORKER_TIMEOUT_SIG: {
+            rt_kprintf("Worker: Work completed\n");
+            status = Q_TRAN(&WorkerAO_idle);
+            break;
+        }
+        
+        case WORKER_WORK_SIG: {
+            WorkerWorkEvt const *evt = (WorkerWorkEvt const *)e;
+            rt_kprintf("Worker: Additional work ID %u queued\n", evt->work_id);
+            status = Q_HANDLED();
+            break;
+        }
+        
+        default: {
+            status = Q_SUPER(&QHsm_top);
+            break;
+        }
+    }
+    
+    return status;
 }
 
 /*==========================================================================*/
-/* Monitor QXThread Implementation */
+/* Monitor Active Object Implementation */
 /*==========================================================================*/
-static void MonitorThread_ctor(void) {
-    MonitorThread *me = &l_monitorThread;
+static void MonitorAO_ctor(void) {
+    MonitorAO *me = &l_monitorAO;
     
-    QXThread_ctor(&me->super, &MonitorThread_run, 0);
+    QActive_ctor(&me->super, Q_STATE_CAST(&MonitorAO_initial));
+    QTimeEvt_ctorX(&me->timeEvt, &me->super, MONITOR_TIMEOUT_SIG, 0U);
     me->check_count = 0;
 }
 
-static void MonitorThread_run(QXThread * const me) {
-    MonitorThread *mt = (MonitorThread *)me;
+static QState MonitorAO_initial(MonitorAO * const me, QEvt const * const e) {
+    (void)e;
     
-    rt_kprintf("Monitor: Thread started\n");
+    /* Subscribe to monitor signals */
+    QActive_subscribe(&me->super, MONITOR_CHECK_SIG);
     
-    for (;;) {
-        /* Periodic monitoring */
-        QXThread_delay(300); /* 3 second intervals */
+    return Q_TRAN(&MonitorAO_monitoring);
+}
+
+static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e) {
+    QState status;
+    
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            rt_kprintf("Monitor: Starting periodic monitoring\n");
+            QTimeEvt_armX(&me->timeEvt, 300, 300); /* 3 second intervals */
+            status = Q_HANDLED();
+            break;
+        }
         
-        mt->check_count++;
-        rt_kprintf("Monitor: System check #%u - All systems operational\n", 
-                  mt->check_count);
+        case Q_EXIT_SIG: {
+            QTimeEvt_disarm(&me->timeEvt);
+            status = Q_HANDLED();
+            break;
+        }
         
-        /* Send check signal to monitor (could be used for health checks) */
-        QACTIVE_POST((QActive *)&l_monitorThread, Q_NEW(QEvt, MONITOR_CHECK_SIG), me);
+        case MONITOR_TIMEOUT_SIG: {
+            /* Periodic monitoring */
+            me->check_count++;
+            rt_kprintf("Monitor: System check #%u - All systems operational\n", 
+                      me->check_count);
+            
+            /* Send check signal to self (could be used for health checks) */
+            QACTIVE_POST(&me->super, Q_NEW(QEvt, MONITOR_CHECK_SIG), me);
+            
+            status = Q_HANDLED();
+            break;
+        }
+        
+        case MONITOR_CHECK_SIG: {
+            rt_kprintf("Monitor: Health check completed\n");
+            status = Q_HANDLED();
+            break;
+        }
+        
+        default: {
+            status = Q_SUPER(&QHsm_top);
+            break;
+        }
     }
+    
+    return status;
 }
 
 /*==========================================================================*/
-/* QXK Demo Initialization */
+/* QActive Demo Initialization */
 /*==========================================================================*/
-void QXKDemo_init(void) {
+void QActiveDemo_init(void) {
     /* Initialize event pools */
     static QF_MPOOL_EL(SensorDataEvt) sensorDataPool[10];
     static QF_MPOOL_EL(ProcessorResultEvt) processorResultPool[10];
@@ -338,14 +431,14 @@ void QXKDemo_init(void) {
     /* Construct all objects */
     SensorAO_ctor();
     ProcessorAO_ctor();
-    WorkerThread_ctor();
-    MonitorThread_ctor();
+    WorkerAO_ctor();
+    MonitorAO_ctor();
 }
 
 /*==========================================================================*/
-/* QXK Demo Startup */
+/* QActive Demo Startup */
 /*==========================================================================*/
-int qxk_demo_start(void) {
+int qactive_demo_start(void) {
     /* Event queue storage */
     static QEvt const *sensorQueue[10];
     static QEvt const *processorQueue[10];
@@ -362,7 +455,7 @@ int qxk_demo_start(void) {
     QF_init();
     
     /* Initialize the demo */
-    QXKDemo_init();
+    QActiveDemo_init();
     
     /* Start active objects */
     QACTIVE_START(AO_Sensor,
@@ -377,39 +470,38 @@ int qxk_demo_start(void) {
                   processorStack, sizeof(processorStack),
                   (void *)0);
     
-    /* Start QXThread extension threads */
-    QXTHREAD_START(&l_workerThread.super,
-                   3U, /* Priority */
-                   workerQueue, Q_DIM(workerQueue),
-                   workerStack, sizeof(workerStack),
-                   (void *)0);
+    QACTIVE_START(AO_Worker,
+                  3U, /* Priority */
+                  workerQueue, Q_DIM(workerQueue),
+                  workerStack, sizeof(workerStack),
+                  (void *)0);
     
-    QXTHREAD_START(&l_monitorThread.super,
-                   4U, /* Priority */
-                   monitorQueue, Q_DIM(monitorQueue),
-                   monitorStack, sizeof(monitorStack),
-                   (void *)0);
+    QACTIVE_START(AO_Monitor,
+                  4U, /* Priority */
+                  monitorQueue, Q_DIM(monitorQueue),
+                  monitorStack, sizeof(monitorStack),
+                  (void *)0);
     
-    rt_kprintf("QXK Demo: Started - 2 QActive objects + 2 QXThread extensions\n");
+    rt_kprintf("QActive Demo: Started - 4 QActive objects\n");
     
     return QF_run(); /* Run the QF application */
 }
 
 /* RT-Thread MSH command exports */
-MSH_CMD_EXPORT(qxk_demo_start, start QXK demo with 2 AOs and 2 XThreads);
+MSH_CMD_EXPORT(qactive_demo_start, start QActive demo with 4 AOs);
 
 /* Manual trigger function for explicit start */
-static int qxk_demo_manual_start(void) {
-    rt_kprintf("=== QXK Demo Manual Start ===\n");
-    return qxk_demo_start();
+static int qactive_demo_manual_start(void) {
+    rt_kprintf("=== QActive Demo Manual Start ===\n");
+    return qactive_demo_start();
 }
 
 /* RT-Thread application auto-initialization */
-static int qxk_demo_init(void) {
-    rt_kprintf("=== QXK Demo Auto-Initialize ===\n");
-    return qxk_demo_start();
+static int qactive_demo_init(void) {
+    rt_kprintf("=== QActive Demo Auto-Initialize ===\n");
+    return qactive_demo_start();
 }
-INIT_APP_EXPORT(qxk_demo_init);
+INIT_APP_EXPORT(qactive_demo_init);
 
 #endif /* RT_USING_FINSH */
-#endif /* QPC_USING_QXK_DEMO */
+#endif /* QPC_USING_QACTIVE_DEMO */

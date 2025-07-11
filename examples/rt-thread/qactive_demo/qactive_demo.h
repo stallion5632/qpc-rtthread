@@ -1,5 +1,5 @@
 /*============================================================================
-* Product: QXK Demo for RT-Thread
+* Product: QActive Demo for RT-Thread
 * Last updated for version 7.2.0
 * Last updated on  2024-12-19
 *
@@ -33,9 +33,9 @@
 #include <rtthread.h>
 
 /*==========================================================================*/
-/* QXK Demo Signals */
+/* QActive Demo Signals */
 /*==========================================================================*/
-enum QXKDemoSignals {
+enum QActiveDemoSignals {
     SENSOR_READ_SIG = Q_USER_SIG,
     SENSOR_DATA_SIG,
     PROCESSOR_START_SIG,
@@ -43,11 +43,13 @@ enum QXKDemoSignals {
     WORKER_WORK_SIG,
     MONITOR_CHECK_SIG,
     TIMEOUT_SIG,
+    WORKER_TIMEOUT_SIG,
+    MONITOR_TIMEOUT_SIG,
     MAX_DEMO_SIG
 };
 
 /*==========================================================================*/
-/* QXK Demo Events */
+/* QActive Demo Events */
 /*==========================================================================*/
 typedef struct {
     QEvt super;
@@ -69,11 +71,13 @@ typedef struct {
 /*==========================================================================*/
 extern QActive * const AO_Sensor;
 extern QActive * const AO_Processor;
+extern QActive * const AO_Worker;
+extern QActive * const AO_Monitor;
 
 /*==========================================================================*/
-/* QXK Demo Functions */
+/* QActive Demo Functions */
 /*==========================================================================*/
-void QXKDemo_init(void);
-int qxk_demo_start(void);
+void QActiveDemo_init(void);
+int qactive_demo_start(void);
 
 #endif /* QACTIVE_DEMO_H_ */
