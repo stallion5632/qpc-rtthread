@@ -419,11 +419,14 @@ static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e) {
 /* QActive Demo Initialization */
 /*==========================================================================*/
 void QActiveDemo_init(void) {
-    /* Initialize event pools */
+    /* Initialize event pools - must be in ascending order of event size */
+    static QF_MPOOL_EL(QEvt) basicEventPool[20];              /* Basic QEvt pool */
     static QF_MPOOL_EL(SensorDataEvt) sensorDataPool[10];
     static QF_MPOOL_EL(ProcessorResultEvt) processorResultPool[10];
     static QF_MPOOL_EL(WorkerWorkEvt) workerWorkPool[10];
     
+    /* Initialize pools in ascending order of event size */
+    QF_poolInit(basicEventPool, sizeof(basicEventPool), sizeof(QEvt));
     QF_poolInit(sensorDataPool, sizeof(sensorDataPool), sizeof(SensorDataEvt));
     QF_poolInit(processorResultPool, sizeof(processorResultPool), sizeof(ProcessorResultEvt));
     QF_poolInit(workerWorkPool, sizeof(workerWorkPool), sizeof(WorkerWorkEvt));
