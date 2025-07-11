@@ -493,12 +493,6 @@ int qactive_demo_start(void) {
 /* RT-Thread MSH command exports */
 MSH_CMD_EXPORT(qactive_demo_start, start QActive demo with 4 AOs);
 
-/* Manual trigger function for explicit start */
-static int qactive_demo_manual_start(void) {
-    rt_kprintf("=== QActive Demo Manual Start ===\n");
-    return qactive_demo_start();
-}
-
 /* RT-Thread application auto-initialization */
 static int qactive_demo_init(void) {
     rt_kprintf("=== QActive Demo Auto-Initialize ===\n");
