@@ -296,6 +296,7 @@ int_t QF_run(void) {
     handle_evts(); /* handle all events posted so far */
 
     if (l_currAO == (QActive*)0) { /* current AO not set? */
+        PRINTF_S("[QF_run] l_currAO not set, searching highest-prio AO\n");
         /* take the highest-priority registered AO */
         for (uint8_t p = QF_MAX_ACTIVE; p != 0U; --p) {
             if (QActive_registry_[p] != (QActive *)0) {
@@ -306,6 +307,7 @@ int_t QF_run(void) {
     }
     /* still not found? */
     if (l_currAO != (QActive*)0) {
+        PRINTF_S("[QF_run] l_currAO set to %p\n", l_currAO);
         extern Dictionary QSPY_objDict;
 
         char const* name = Dictionary_get(&QSPY_objDict,
@@ -340,6 +342,7 @@ int_t QF_run(void) {
 }
 
 /*--------------------------------------------------------------------------*/
+#if 0
 void QActive_start_(QActive* const me,
     QPrioSpec const prioSpec,
     QEvt const** const qSto,
@@ -359,6 +362,7 @@ void QActive_start_(QActive* const me,
 
     QHSM_INIT(&me->super, par, me->prio); /* the top-most initial tran. */
 }
+#endif
 /*..........................................................................*/
 #ifdef QF_ACTIVE_STOP
 void QActive_stop(QActive* const me) {

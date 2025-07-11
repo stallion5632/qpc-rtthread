@@ -1,29 +1,29 @@
-# QActive Demo for RT-Thread
+# QActive Demo for RT-Thread（QActive与RT-Thread集成演示）
 
-This directory contains a comprehensive demonstration of QPC Active Objects (QActive) running on RT-Thread with native RT-Thread integration.
+本目录展示了QPC Active Objects（QActive）在RT-Thread上的原生集成与应用，适用于工业物联网网关等场景。
 
-## Overview
+## 项目简介
 
-The QActive demo showcases the integration of QPC's active objects (QActive) with RT-Thread native threads in a real-world IoT gateway scenario. The demo implements an industrial data logging system that demonstrates practical integration patterns between QPC/QActive and RT-Thread domains.
+本演示系统以工业数据采集与存储为例，展示QPC的主动对象（QActive）与RT-Thread原生线程的协作模式，涵盖事件驱动、线程调度、同步机制等关键集成点。
 
-## Architecture
+## 系统架构
 
-### QActive Components (QPC Framework)
-1. **Sensor AO**: Periodically reads sensor data and publishes it
-2. **Processor AO**: Processes received sensor data, handles configuration updates
-3. **Worker AO**: Handles background data compression and processing
-4. **Monitor AO**: Performs periodic system health monitoring
+### QActive主动对象（QPC框架）
+1. **Sensor AO（传感器主动对象）**：周期性采集传感器数据并发布事件
+2. **Processor AO（处理器主动对象）**：处理传感器数据，响应配置更新
+3. **Worker AO（工作主动对象）**：后台数据压缩与处理
+4. **Monitor AO（监控主动对象）**：周期性健康检查与系统监控
 
-### RT-Thread Components (Native RT-Thread)
-1. **Storage Thread**: Manages local data storage operations
-2. **Shell Thread**: Provides RT-Thread MSH commands for system control
+### RT-Thread原生线程
+1. **Storage Thread（存储线程）**：负责本地数据存储操作
+2. **Shell Thread（命令行线程）**：提供MSH命令接口，实现系统控制
 
-### Synchronization Objects
-- **Mutex**: RT-Thread mutex for shared configuration protection
-- **Semaphore**: RT-Thread semaphore for storage coordination
-- **Event Set**: RT-Thread event set for system-wide notifications
+### 同步与通信对象
+- **互斥锁（Mutex）**：保护共享配置
+- **信号量（Semaphore）**：协调存储操作
+- **事件集（Event Set）**：系统级通知与状态同步
 
-## System Architecture
+## 系统结构图
 
 ```mermaid
 graph TB
@@ -35,14 +35,14 @@ graph TB
         WorkerAO["Worker AO<br/>(Priority: 3)"]
         MonitorAO["Monitor AO<br/>(Priority: 4)"]
     end
-    
+
     %% RT-Thread Domain
     subgraph RTThread["RT-Thread Domain (Native Threads)"]
         direction TB
         StorageThread["Storage Thread<br/>(Priority: 10)"]
         ShellThread["Shell Thread<br/>(Priority: 12)"]
     end
-    
+
     %% Synchronization Objects
     subgraph Sync["Synchronization Objects"]
         direction TB
@@ -50,14 +50,14 @@ graph TB
         Semaphore["RT-Thread Semaphore<br/>(Storage Coordination)"]
         EventSet["RT-Thread Event Set<br/>(System Notifications)"]
     end
-    
+
     %% Data Flow
     SensorAO --> ProcessorAO
     ProcessorAO --> WorkerAO
     WorkerAO --> StorageThread
     StorageThread --> MonitorAO
     ShellThread --> ProcessorAO
-    
+
     %% Synchronization
     ProcessorAO -.-> Mutex
     StorageThread -.-> Mutex
@@ -65,16 +65,16 @@ graph TB
     MonitorAO -.-> Semaphore
     StorageThread -.-> EventSet
     ShellThread -.-> EventSet
-    
+
     %% External Storage
     StorageThread --> LocalStorage["Local File Storage"]
-    
+
     style QPC fill:#e1f5fe
     style RTThread fill:#f3e5f5
     style Sync fill:#fff3e0
 ```
 
-## Data Flow and Communication
+## 数据流与通信机制
 
 ```mermaid
 sequenceDiagram
@@ -85,11 +85,11 @@ sequenceDiagram
     participant Monitor as Monitor AO
     participant Storage as Storage Thread
     participant FS as File System
-    
+
     %% System Initialization
     Shell->>+Sensor: SENSOR_READ_SIG
     Shell->>+Processor: PROCESSOR_START_SIG
-    
+
     %% Normal Operation Cycle
     loop Data Collection Cycle
         Sensor->>Sensor: SENSOR_TIMEOUT_SIG
@@ -102,12 +102,12 @@ sequenceDiagram
         FS-->>-Storage: Write Complete
         Storage->>Monitor: RT-Thread Semaphore
     end
-    
+
     %% Configuration Update
     Shell->>+Processor: PROCESSOR_CONFIG_SIG
     Processor->>Processor: Update Configuration
     Processor->>Storage: RT-Thread Event Set
-    
+
     %% Health Monitoring
     loop Health Check Cycle
         Monitor->>Monitor: MONITOR_TIMEOUT_SIG
@@ -115,24 +115,24 @@ sequenceDiagram
         Storage-->>Monitor: Status Response
         Monitor->>Shell: Health Report
     end
-    
+
     %% System Control
     Shell->>Shell: MSH Commands
     Shell->>+Processor: Configuration Updates
     Shell->>+Monitor: Status Queries
 ```
 
-## Runtime Execution Flow
+## 运行流程（状态图）
 
 ```mermaid
 stateDiagram-v2
     [*] --> SystemInit
-    
+
     SystemInit --> QFInit: QF_init()
     QFInit --> AOInit: Initialize AOs
     AOInit --> RTInit: RT-Thread Integration
     RTInit --> Running: QF_run()
-    
+
     state Running {
         [*] --> SensorReading
         SensorReading --> DataProcessing: SENSOR_DATA_SIG
@@ -140,171 +140,104 @@ stateDiagram-v2
         DataCompression --> DataStorage: RT-Thread Queue
         DataStorage --> HealthCheck: RT-Thread Semaphore
         HealthCheck --> SensorReading: MONITOR_TIMEOUT_SIG
-        
+
         state ConfigUpdate {
             [*] --> ConfigReceived
             ConfigReceived --> ConfigValidation: PROCESSOR_CONFIG_SIG
             ConfigValidation --> ConfigApplied: Valid Config
             ConfigApplied --> [*]
         }
-        
+
         SensorReading --> ConfigUpdate: Shell Command
         ConfigUpdate --> SensorReading: Config Applied
     }
-    
+
     Running --> [*]: System Shutdown
 ```
 
-## Thread Priority and Scheduling
+## 线程优先级与调度
 
-| Component | Type | Priority | Stack Size | Description |
-|-----------|------|----------|------------|-------------|
-| Sensor AO | QActive | 1 (Highest) | 1024 bytes | Time-critical sensor reading |
-| Processor AO | QActive | 2 | 1024 bytes | Data processing and validation |
-| Worker AO | QActive | 3 | 1024 bytes | Background data compression |
-| Monitor AO | QActive | 4 | 1024 bytes | System health monitoring |
-| Storage Thread | RT-Thread | 10 | 2048 bytes | File system operations |
-| Shell Thread | RT-Thread | 12 (Lowest) | 1024 bytes | User command interface |
+| 组件           | 类型      | 优先级 | 栈大小      | 说明                 |
+|----------------|-----------|--------|-------------|----------------------|
+| Sensor AO      | QActive   | 3      | 1024字节    | 传感器采集           |
+| Processor AO   | QActive   | 4      | 1024字节    | 数据处理与校验       |
+| Worker AO      | QActive   | 5      | 1024字节    | 后台数据压缩         |
+| Monitor AO     | QActive   | 6      | 1024字节    | 系统健康监控         |
+| Storage Thread | RT-Thread | 10     | 2048字节    | 文件存储操作         |
+| Shell Thread   | RT-Thread | 12     | 1024字节    | 用户命令接口         |
 
-## Communication Mechanisms
+## 通信机制
 
+- QActive间通过QPC事件池和消息队列通信
+- AO与RT-Thread原生线程通过消息队列、信号量、事件集等同步对象协作
 ```mermaid
 graph LR
     subgraph QActive["QActive Domain"]
         QA1["QActive Objects"]
     end
-    
+
     subgraph RTThread["RT-Thread Domain"]
         RT1["RT-Thread Objects"]
     end
-    
+
     subgraph Mechanisms["Communication Mechanisms"]
         Queue["RT-Thread<br/>Message Queue"]
         Mutex["RT-Thread<br/>Mutex"]
         Semaphore["RT-Thread<br/>Semaphore"]
         EventSet["RT-Thread<br/>Event Set"]
     end
-    
+
     QA1 --> Queue
     Queue --> RT1
-    
+
     QA1 --> Mutex
     RT1 --> Mutex
-    
+
     RT1 --> Semaphore
     QA1 --> Semaphore
-    
+
     RT1 --> EventSet
     QA1 --> EventSet
-## Key Integration Features
-
-### QActive → RT-Thread Communication
-- **Data Transfer**: Worker AO sends processed data to Storage thread via RT-Thread message queue
-- **Storage Coordination**: Worker AO triggers storage operations via RT-Thread semaphore
-- **System Events**: QActive components signal system-wide events via RT-Thread event set
-
-### RT-Thread → QActive Communication  
-- **Configuration Updates**: Shell thread sends configuration changes to Processor AO via QPC events
-- **Health Coordination**: Storage thread coordinates with Monitor AO via shared variables protected by RT-Thread mutex
-
-### Bidirectional Integration
-- **Statistics Sharing**: Both domains update shared statistics protected by RT-Thread mutex
-- **Event Coordination**: System-wide events (health checks, errors) are coordinated via RT-Thread event set
-- **MSH Commands**: RT-Thread shell commands control QActive components in real-time
-
-## Runtime Control
-
-### MSH Commands
-The demo provides several RT-Thread MSH commands for real-time control:
-
-```bash
-# Start QActive components
-msh> qactive_control start
-
-# Stop QActive components  
-msh> qactive_control stop
-
-# Show system statistics
-msh> qactive_control stats
-
-# Configure timing parameters
-msh> qactive_control config 100 500 1000
-
-# System monitoring
-msh> system_status       # Show thread status
-msh> system_reset        # Reset statistics
 ```
 
-### System Control Commands
-Direct control over system components:
+### **QActive与RT-Thread集成特性**
 
-```bash
-# QActive component control
-msh> qactive_start_cmd       # Start QActive sensor/processor
-msh> qactive_stop_cmd        # Stop QActive components  
-msh> qactive_stats_cmd       # Show system statistics
-msh> qactive_config_cmd      # Configure timing parameters
+1. **线程优先级映射**：QActive对象的优先级高于普通RT-Thread线程，确保关键任务能够实时响应。
+2. **池事件快速通道机制**：QPC框架通过池事件强制事件走队列，确保每个事件在独立的线程中执行，避免对RT-Thread原生调度的干扰。
+3. **同步对象统一管理**：所有的互斥锁、信号量、事件集等同步对象都通过RT-Thread原生实现，保持系统的兼容性。
 
-# System monitoring
-msh> system_status_cmd       # Show thread status
-msh> system_reset_cmd        # Reset statistics
-```
+### **QActive与RT-Thread通信方式**
 
-## Expected Behavior
+1. **QActive → RT-Thread通信**：
+   - **数据传输**：QActive通过消息队列将数据传输给存储线程。
+   - **存储协调**：通过信号量触发存储操作。
+   - **系统事件**：QActive通过RT-Thread事件集信号化事件。
+2. **RT-Thread → QActive通信**：
+   - **配置更新**：Shell线程通过QPC事件向QActive传递配置变化。
+   - **健康协调**：通过互斥量保护的共享变量进行协调。
+3. **双向集成**：
+   - **统计信息共享**：RT-Thread和QActive共享统计数据，确保一致性。
+   - **事件协调**：系统事件通过RT-Thread事件集协调。
+   - **MSH命令**：Shell命令实时控制QActive组件。
 
-### Normal Operation
-1. **System Startup**: QActive components initialize, RT-Thread threads start
-2. **Data Collection**: Sensor AO periodically reads sensor data
-3. **Data Processing**: Processor AO validates and processes sensor data
-4. **Data Compression**: Worker AO compresses processed data  
-5. **Data Storage**: Storage thread saves compressed data to local storage
-6. **Health Monitoring**: Monitor AO performs periodic health checks
-7. **Status Reporting**: Shell thread provides real-time status via MSH commands
+### **运行时控制与技术细节**
 
-### Integration Points
-- **QActive → RT-Thread**: Processed data flows from Worker AO to Storage thread
-- **RT-Thread → QActive**: Configuration updates flow from Shell thread to Processor AO
-- **Bidirectional**: System statistics and health status are shared between domains
+- MSH命令用于启动、停止QActive组件、查看统计信息、配置定时参数、监控系统状态等。
 
-## Build and Run
+- QActive使用QPC的事件池进行动态分配，RT-Thread线程使用其自身内存管理，共享资源通过RT-Thread同步原语保护。
 
-### Prerequisites
-- RT-Thread development environment
-- QPC library package enabled
-- FINSH shell component enabled
-- QActive demo component enabled (`QPC_USING_QACTIVE_DEMO`)
+- 采用优雅降级，系统仍可运行，错误会通过健康监控报告，并自动恢复。
 
-### Build Configuration
-In RT-Thread package configuration:
-```
-RT-Thread online packages --->
-    tools packages --->
-        [*] QPC: Real-Time Embedded Framework
-            [*] Enable QActive Demo
-```
+- QActive组件优先级高于RT-Thread线程，事件驱动架构减少CPU占用，优化同步设计减少阻塞。
 
-### Compilation
-```bash
-# Generate build system
-python tools/menuconfig.py
+### **集成的优势**
 
-# Enable QPC and QActive Demo
-# Navigate to packages → tools → QPC → Enable QActive Demo
+- 支持RT-Thread生态系统和工具，支持QPC的事件驱动架构和层次化状态机，提升开发效率。
 
-# Build the project
-scons -j4
-```
+- QPC确保实时性，配合RT-Thread调度机制，保障关键任务响应。
 
-### Running
-```bash
-# Run on QEMU (example for vexpress-a9)
-qemu-system-arm -M vexpress-a9 -kernel rtthread.bin -nographic
+- QPC提供性能分析工具和健康监控，RT-Thread的资源管理和调度系统提升系统优化。
 
-# Once booted, use MSH commands
-msh> qactive_control start
-msh> qactive_control stats
-msh> system_status_cmd
-```
 
 ## Technical Details
 
@@ -339,92 +272,3 @@ msh> system_status_cmd
 - **Best of Both Worlds**: Combine QPC's real-time capabilities with RT-Thread's ecosystem
 - **Practical Integration**: Real-world patterns for industrial applications
 - **Scalable Design**: Architecture scales from simple demos to complex systems
-
-## Troubleshooting
-
-### Common Issues
-1. **Compilation Errors**: Ensure `QPC_USING_QACTIVE_DEMO` is defined
-2. **Missing Commands**: Verify FINSH shell is enabled
-3. **Runtime Errors**: Check thread stack sizes and priority settings
-4. **Memory Issues**: Ensure adequate heap size for dynamic allocation
-
-### Debug Tips
-- Use RT-Thread's built-in debugging commands
-- Monitor thread status with `list_thread` command
-- Check memory usage with `list_mem` command
-- Enable QPC's software tracing for detailed event flow analysis
-
-## Source Files
-
-- **main.c**: QActive objects implementation and main application
-- **qactive_demo.h**: QActive demo signals and event definitions
-- **rt_integration.c**: RT-Thread integration implementation
-- **rt_integration.h**: RT-Thread integration interfaces
-- **SConscript**: Build configuration for RT-Thread
-- **README.md**: This documentation file
-
-## License
-
-This demo is part of the QPC framework and is licensed under the GPL v3 license. For commercial licensing, please contact Quantum Leaps.
-
----
-
-*This demo demonstrates practical integration patterns between QPC/QActive and RT-Thread, providing a foundation for building industrial IoT applications with real-time requirements.*
-msh> qactive_stats_cmd       # Show system statistics
-msh> qactive_config_cmd      # Configure timing parameters
-```
-
-## Expected Behavior
-
-1. **Sensor Data Flow**: Sensor AO generates periodic temperature/pressure readings
-2. **Data Processing**: Processor AO validates sensor data and forwards to Worker AO
-3. **Data Compression**: Worker AO compresses data and triggers storage operations
-4. **Storage Management**: RT-Thread Storage thread handles local file operations
-5. **System Monitoring**: Monitor AO performs periodic health checks
-6. **Interactive Control**: MSH commands allow real-time system configuration
-
-## Integration Benefits
-
-- **Educational Value**: Demonstrates practical QActive/RT-Thread integration patterns
-- **Industrial Relevance**: Simulates real-world IoT gateway scenarios  
-- **Best Practices**: Shows proper synchronization and resource management
-- **Runtime Control**: Enables dynamic system configuration and monitoring
-- **Scalability**: Framework easily extended for additional components
-
-## Building and Running
-
-1. **Prerequisites**: RT-Thread environment with QPC package installed
-2. **Configuration**: Enable `QPC_USING_QACTIVE_DEMO` in RT-Thread configuration
-3. **Build**: Use RT-Thread's `scons` build system
-4. **Run**: Deploy to target hardware or simulator
-
-## Files Structure
-
-```
-qactive_demo/
-├── main.c              # Main application with QActive objects
-├── qactive_demo.h      # Header with signals and event definitions
-├── rt_integration.c    # RT-Thread integration implementation
-├── rt_integration.h    # RT-Thread integration headers
-├── SConscript         # Build configuration
-└── README.md          # This documentation
-```
-
-## Technical Details
-
-### Memory Management
-- Uses RT-Thread's memory management for all dynamic allocations
-- QPC's publish-subscribe system for event distribution
-- No complex memory pools - relies on RT-Thread's heap
-
-### Threading Model
-- QActive objects run as RT-Thread threads with QPC state machines
-- RT-Thread native threads for storage and shell operations
-- Proper priority assignment ensures real-time constraints
-
-### Error Handling
-- Graceful degradation on resource allocation failures
-- Comprehensive error reporting via RT-Thread console
-- Recovery mechanisms for transient failures
-
-This demo represents a production-ready foundation for integrating QPC Active Objects with RT-Thread applications in embedded systems.

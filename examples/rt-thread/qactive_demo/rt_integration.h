@@ -39,15 +39,15 @@ enum RTIntegrationSignals {
     /* Storage Thread signals */
     STORAGE_SAVE_SIG = MAX_DEMO_SIG,
     STORAGE_STATUS_SIG,
-    
+
     /* Shell Thread signals */
     SHELL_COMMAND_SIG,
     SHELL_RESPONSE_SIG,
-    
+
     /* System-wide notification signals */
     SYSTEM_HEALTH_SIG,
     SYSTEM_CONFIG_SIG,
-    
+
     MAX_RT_INTEGRATION_SIG
 };
 
@@ -72,14 +72,14 @@ typedef struct {
 typedef struct {
     QEvt super;
     uint32_t system_status;
-    uint32_t qxk_health;
+    uint32_t qp_health;
     uint32_t rt_health;
 } SystemHealthEvt;
 
 /*==========================================================================*/
 /* RT-Thread Synchronization Objects */
 /*==========================================================================*/
-/* Global synchronization objects for RT-Thread/QXK communication */
+/* Global synchronization objects for Xxx */
 extern rt_mutex_t g_config_mutex;      /* Mutex for shared configuration */
 extern rt_sem_t g_storage_sem;         /* Semaphore for storage coordination */
 extern rt_event_t g_system_event;      /* Event set for system notifications */
@@ -96,7 +96,7 @@ typedef struct {
 
 extern SharedConfig g_shared_config;
 
-/* System statistics shared between QXK and RT-Thread */
+
 typedef struct {
     uint32_t sensor_readings;
     uint32_t processed_data;
