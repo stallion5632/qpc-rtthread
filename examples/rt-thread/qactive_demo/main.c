@@ -432,15 +432,4 @@ int main(void)
     return (int)QF_run();
 }
 
-#ifdef RT_USING_FINSH
-/* Export to FINSH commands */
-static int qactive_control(int argc, char **argv)
-{
-    cmd_qactive_control(argc, argv);
-    return 0;
-}
-FINSH_FUNCTION_EXPORT(qactive_control, QActive control);
-MSH_CMD_EXPORT(qactive_control, QActive control);
-#endif
-
 #endif /* QPC_USING_QACTIVE_DEMO */
