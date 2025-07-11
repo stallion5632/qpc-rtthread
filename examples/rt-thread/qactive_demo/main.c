@@ -35,6 +35,10 @@
 
 Q_DEFINE_THIS_FILE
 
+/* QF publish-subscribe table */
+#define MAX_PUB_SIG     32U
+static QSubscrList subscrSto[MAX_PUB_SIG];
+
 /*==========================================================================*/
 /* Sensor Active Object */
 /*==========================================================================*/
@@ -425,6 +429,12 @@ void QActiveDemo_init(void) {
     static QF_MPOOL_EL(ProcessorResultEvt) processorResultPool[10];
     static QF_MPOOL_EL(WorkerWorkEvt) workerWorkPool[10];
     
+    /* Initialize QF framework */
+    QF_init();
+    
+    /* Initialize publish-subscribe system */
+    QF_psInit(subscrSto, Q_DIM(subscrSto));
+    
     /* Initialize pools in ascending order of event size */
     QF_poolInit(basicEventPool, sizeof(basicEventPool), sizeof(QEvt));
     QF_poolInit(sensorDataPool, sizeof(sensorDataPool), sizeof(SensorDataEvt));
@@ -453,9 +463,6 @@ int qactive_demo_start(void) {
     static uint8_t processorStack[1024];
     static uint8_t workerStack[1024];
     static uint8_t monitorStack[1024];
-    
-    /* Initialize QF */
-    QF_init();
     
     /* Initialize the demo */
     QActiveDemo_init();
