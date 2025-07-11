@@ -1,78 +1,127 @@
-# QXK Demo for RT-Thread
+# QActive Demo for RT-Thread
 
-This directory contains a comprehensive demonstration of the QXK (preemptive dual-mode kernel) running on RT-Thread.
+This directory contains a comprehensive demonstration of QP active objects (QActive) running on RT-Thread.
 
 ## Overview
 
-The QXK demo showcases the integration of QPC's active objects (QActive) with QXK's extended threads (QXThread) in an RT-Thread environment. The demo implements a sensor data processing system with background monitoring.
+The QActive demo showcases the integration of QPC's active objects with RT-Thread's threading primitives. The demo implements a sensor data processing system with background monitoring using only QActive objects (no QXK kernel).
+
+## Architecture
+
+```mermaid
+graph TD
+    A[RT-Thread RTOS] --> B[QP Framework]
+    B --> C[QActive Objects]
+    C --> D[Sensor AO<br/>Priority 1]
+    C --> E[Processor AO<br/>Priority 2]
+    C --> F[Worker AO<br/>Priority 3]
+    C --> G[Monitor AO<br/>Priority 4]
+    
+    D -->|SENSOR_DATA_SIG| E
+    E -->|WORKER_WORK_SIG| F
+    G -->|MONITOR_CHECK_SIG| G
+    
+    H[RT-Thread Mailbox] --> C
+    I[RT-Thread Threads] --> C
+    J[RT-Thread Timer] --> K[QTimeEvt]
+    K --> D
+    K --> F
+    K --> G
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
+    style E fill:#fff3e0
+    style F fill:#fff3e0
+    style G fill:#fff3e0
+```
 
 ## Components
 
 ### Active Objects (QActive)
 1. **Sensor AO**: Periodically reads sensor data and publishes it
 2. **Processor AO**: Processes received sensor data and generates results
+3. **Worker AO**: Handles background processing work from the processor
+4. **Monitor AO**: Performs periodic system health monitoring
 
-### Extended Threads (QXThread)  
-1. **Worker Thread**: Handles background processing work from the processor
-2. **Monitor Thread**: Performs periodic system health monitoring
+## Event Flow Sequence
 
-## Architecture
+```mermaid
+sequenceDiagram
+    participant RT as RT-Thread
+    participant QF as QF Framework
+    participant S as Sensor AO
+    participant P as Processor AO
+    participant W as Worker AO
+    participant M as Monitor AO
 
-```
-┌─────────────────┐    ┌─────────────────┐
-│   Sensor AO     │───▶│  Processor AO   │
-│  (Priority 1)   │    │  (Priority 2)   │
-└─────────────────┘    └─────────────────┘
-                                │
-                                ▼
-┌─────────────────┐    ┌─────────────────┐
-│  Worker Thread  │◀───┤  Monitor Thread │
-│  (Priority 3)   │    │  (Priority 4)   │
-└─────────────────┘    └─────────────────┘
+    RT->>QF: QF_init()
+    QF->>S: QACTIVE_START()
+    QF->>P: QACTIVE_START()
+    QF->>W: QACTIVE_START()
+    QF->>M: QACTIVE_START()
+    QF->>RT: QF_run()
+    
+    loop Periodic Sensor Reading
+        S->>S: QTimeEvt TIMEOUT_SIG
+        S->>P: SENSOR_DATA_SIG
+        P->>P: Process Data
+        P->>W: WORKER_WORK_SIG
+        W->>W: QTimeEvt WORKER_TIMEOUT_SIG
+    end
+    
+    loop Periodic Monitoring
+        M->>M: QTimeEvt MONITOR_TIMEOUT_SIG
+        M->>M: MONITOR_CHECK_SIG
+    end
 ```
 
 ## Key Features
 
-- **Dual-mode architecture**: Combines cooperative QActive objects with preemptive QXThread extensions
+- **Pure QActive architecture**: Uses only QActive objects without QXK kernel
 - **Event-driven communication**: Uses QPC's publish-subscribe mechanism for inter-object communication
-- **Blocking operations**: Demonstrates QXThread's ability to perform blocking operations (QXThread_delay, QXThread_queueGet)
-- **RT-Thread integration**: Automatic initialization via INIT_APP_EXPORT
+- **Timed operations**: Uses QTimeEvt for periodic behavior and delays
+- **RT-Thread integration**: Uses RT-Thread mailboxes and threads for active objects
+- **State machine behavior**: Each AO implements proper state machines
+- **Automatic startup**: Automatic initialization via INIT_APP_EXPORT
 - **Manual control**: MSH command support for manual start/stop
 
 ## Usage
 
 ### Automatic Startup
-The demo automatically starts when RT-Thread boots if `QPC_USING_QXK_DEMO` is enabled in the configuration.
+The demo automatically starts when RT-Thread boots if `QPC_USING_QACTIVE_DEMO` is enabled in the configuration.
 
 ### Manual Control
 Use the RT-Thread MSH (shell) command:
 ```
-msh> qxk_demo_start
+msh> qactive_demo_start
 ```
 
 ### Expected Output
 ```
-QXK Demo: Started - 2 QActive objects + 2 QXThread extensions
+QActive Demo: Started - 4 QActive objects
 Sensor: Starting periodic sensor readings
 Processor: Idle, waiting for data
-Worker: Thread started
-Monitor: Thread started
+Worker: Idle, waiting for work
+Monitor: Starting periodic monitoring
 Sensor: Reading 1, data = 266
 Processor: Received sensor data = 266
 Processor: Processing data (count: 1)
-Worker: Processing work ID 1 (total: 1)
+Worker: Received work ID 1
+Worker: Processing work (total: 1)
 Monitor: System check #1 - All systems operational
-Worker: Work ID 1 completed
+Worker: Work completed
+Monitor: Health check completed
 ...
 ```
 
 ## Configuration
 
-To enable the QXK demo, add the following to your RT-Thread configuration:
+To enable the QActive demo, add the following to your RT-Thread configuration:
 
 ```c
-#define QPC_USING_QXK_DEMO          1
-#define QPC_USING_QXK               1
+#define QPC_USING_QACTIVE_DEMO      1
 #define PKG_USING_QPC               1
 #define RT_USING_FINSH              1
 #define RT_USING_MAILBOX            1
@@ -81,28 +130,38 @@ To enable the QXK demo, add the following to your RT-Thread configuration:
 ## Build Integration
 
 The demo is integrated into the QPC build system via:
-- **SConscript**: Automatically included when `QPC_USING_QXK_DEMO` is enabled
-- **Dependencies**: Requires QPC with QXK kernel support
+- **SConscript**: Automatically included when `QPC_USING_QACTIVE_DEMO` is enabled
+- **Dependencies**: Requires QPC with QF framework support (no QXK required)
 - **RT-Thread**: Uses standard RT-Thread build system
 
 ## Files
 
 - `main.c`: Main demo implementation with all components
-- `qxk_demo.h`: Header file with signal definitions and prototypes
+- `qactive_demo.h`: Header file with signal definitions and prototypes
 - `SConscript`: Build configuration for RT-Thread SCons
 - `README.md`: This documentation file
 
 ## Learning Points
 
 This demo illustrates:
-1. How to create and start QXThread extension threads
-2. Proper use of QXK APIs (QXThread_ctor, QXTHREAD_START, QXThread_delay)
-3. Event-driven communication between QActive objects and QXThread extensions
+1. How to create and start QActive objects on RT-Thread
+2. Proper use of QF APIs (QF_init, QF_run, QACTIVE_START)
+3. Event-driven communication between QActive objects
 4. Integration with RT-Thread's initialization and shell systems
-5. Best practices for mixed cooperative/preemptive scheduling
+5. Using QTimeEvt for periodic behavior and delays
+6. Implementing proper state machines in QActive objects
+7. Best practices for cooperative scheduling with active objects
+
+## Migration from QXK
+
+This demo was migrated from a QXK-based implementation to use only QActive objects:
+- **QXThread** → **QActive** with state machines
+- **QXThread_delay()** → **QTimeEvt** for timing
+- **QXThread_queueGet()** → **QActive event dispatch**
+- **Preemptive threads** → **Cooperative active objects**
 
 ## See Also
 
 - [QPC Documentation](https://www.state-machine.com/qpc)
-- [QXK Kernel Guide](https://www.state-machine.com/qpc/qxk.html)
+- [QF Framework Guide](https://www.state-machine.com/qpc/qf.html)
 - [RT-Thread Documentation](https://www.rt-thread.org/document/site/)
