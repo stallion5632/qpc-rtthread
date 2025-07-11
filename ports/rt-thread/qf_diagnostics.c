@@ -63,6 +63,9 @@ static void QF_printAOStatus(void) {
 static void QF_setStrategy(int argc, char **argv) {
     if (argc < 2) {
         rt_kprintf("Usage: qf_strategy <default|highperf>\n");
+        rt_kprintf("Current strategy: %s\n", 
+                  QF_getDispatcherPolicy() == &QF_defaultStrategy ? "Default" : 
+                  QF_getDispatcherPolicy() == &QF_highPerfStrategy ? "High Performance" : "Unknown");
         return;
     }
     

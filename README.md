@@ -262,6 +262,48 @@ The advanced dispatcher provides industrial-grade reliability and performance wh
 #define QF_DISPATCHER_PRIORITY 0U   // Highest priority for real-time processing
 ```
 
+### Dispatcher Strategy Management
+
+The dispatcher supports pluggable strategies for different performance characteristics:
+
+```c
+// Set dispatcher strategy
+QF_setDispatcherStrategy(&QF_defaultStrategy);      // Default strategy
+QF_setDispatcherStrategy(&QF_highPerfStrategy);     // High performance strategy
+
+// Get current strategy
+QF_DispatcherStrategy const *current = QF_getDispatcherPolicy();
+```
+
+### Strategy Differences
+
+| Feature | Default Strategy | High Performance Strategy |
+|---------|------------------|---------------------------|
+| **Event Merging** | Merges events with same signal | Merges only explicitly marked mergeable events |
+| **Priority Sorting** | Compares by signal value | Uses explicit event priority levels |
+| **Event Dropping** | Never drops events | Drops non-critical events when queue >80% full |
+| **Priority Mapping** | All events → normal priority | Maps to HIGH/NORMAL/LOW based on event flags |
+| **Use Case** | General purpose, safe | High-throughput systems with explicit event prioritization |
+
+### Strategy Configuration Examples
+
+**Default Strategy (Safe):**
+```c
+QF_setDispatcherStrategy(&QF_defaultStrategy);
+// - Preserves all events
+// - Simple merging by signal
+// - Good for general applications
+```
+
+**High Performance Strategy (Optimized):**
+```c
+QF_setDispatcherStrategy(&QF_highPerfStrategy);
+// - Intelligent event dropping
+// - Priority-based processing
+// - Optimized for high-frequency events
+// - Requires explicit event prioritization
+```
+
 ## Safety Features
 
 - **Atomic Operations**: All staging buffer operations use atomic instructions

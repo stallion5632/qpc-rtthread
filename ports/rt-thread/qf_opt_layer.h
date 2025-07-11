@@ -91,6 +91,7 @@ typedef struct {
 /* Function prototypes */
 void QF_initOptLayer(void);
 void QF_setDispatcherStrategy(QF_DispatcherStrategy const *strategy);
+QF_DispatcherStrategy const *QF_getDispatcherPolicy(void);
 bool QF_postFromISR(QActive * const me, QEvt const * const e);
 uint32_t QF_getLostEventCount(void);
 void QF_enableOptLayer(void);

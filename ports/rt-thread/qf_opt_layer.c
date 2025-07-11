@@ -66,12 +66,14 @@ static struct {
 /* Dispatcher control */
 static struct {
     struct rt_semaphore sem;
-    QF_DispatcherStrategy const *strategy;
     QF_DispatcherMetrics metrics;
     uint32_t totalBatchSize;
     uint32_t batchCount;
     bool enabled;
 } l_dispatcher;
+
+/* Strategy pointer - const qualified for MISRA C compliance */
+static QF_DispatcherStrategy const *l_policy = &QF_defaultStrategy;
 
 /* Forward declarations */
 static void dispatcherThreadEntry(void *parameter);
@@ -124,7 +126,6 @@ void QF_initOptLayer(void) {
     
     /* Initialize dispatcher control */
     l_dispatcher.enabled = true;
-    l_dispatcher.strategy = &QF_defaultStrategy;
     rt_memset(&l_dispatcher.metrics, 0, sizeof(l_dispatcher.metrics));
     l_dispatcher.totalBatchSize = 0U;
     l_dispatcher.batchCount = 0U;
@@ -151,7 +152,12 @@ void QF_initOptLayer(void) {
 /*..........................................................................*/
 void QF_setDispatcherStrategy(QF_DispatcherStrategy const *strategy) {
     Q_REQUIRE_ID(100, strategy != (QF_DispatcherStrategy *)0);
-    l_dispatcher.strategy = strategy;
+    l_policy = strategy;
+}
+
+/*..........................................................................*/
+QF_DispatcherStrategy const *QF_getDispatcherPolicy(void) {
+    return l_policy;
 }
 
 /*..........................................................................*/
@@ -203,7 +209,7 @@ static void dispatcherThreadEntry(void *parameter) {
 static void QF_processEventBatch(QEvt const **eventBatch, 
                                 QActive **targetBatch, 
                                 uint32_t batchSize) {
-    QF_DispatcherStrategy const *strategy = l_dispatcher.strategy;
+    QF_DispatcherStrategy const *strategy = l_policy;
     
     /* Apply strategy-based optimizations */
     for (uint32_t i = 0; i < batchSize; ++i) {
@@ -289,7 +295,7 @@ bool QF_postFromISR(QActive * const me, QEvt const * const e) {
     }
     
     /* Determine priority level using strategy */
-    QF_PrioLevel prioLevel = l_dispatcher.strategy->getPrioLevel(e);
+    QF_PrioLevel prioLevel = l_policy->getPrioLevel(e);
     
     /* Add to appropriate staging buffer */
     if (QF_addToStagingBuffer(prioLevel, e, me)) {
