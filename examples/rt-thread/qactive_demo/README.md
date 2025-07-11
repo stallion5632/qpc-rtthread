@@ -84,6 +84,8 @@ sequenceDiagram
 - **Timed operations**: Uses QTimeEvt for periodic behavior and delays
 - **RT-Thread integration**: Uses RT-Thread mailboxes and threads for active objects
 - **State machine behavior**: Each AO implements proper state machines
+- **Proper QF initialization**: Includes QF_psInit() for publish-subscribe system
+- **Event pool management**: Multiple event pools for different event types
 - **Automatic startup**: Automatic initialization via INIT_APP_EXPORT
 - **Manual control**: MSH command support for manual start/stop
 
@@ -145,12 +147,34 @@ The demo is integrated into the QPC build system via:
 
 This demo illustrates:
 1. How to create and start QActive objects on RT-Thread
-2. Proper use of QF APIs (QF_init, QF_run, QACTIVE_START)
+2. Proper use of QF APIs (QF_init, QF_psInit, QF_run, QACTIVE_START)
 3. Event-driven communication between QActive objects
 4. Integration with RT-Thread's initialization and shell systems
 5. Using QTimeEvt for periodic behavior and delays
 6. Implementing proper state machines in QActive objects
 7. Best practices for cooperative scheduling with active objects
+8. Critical importance of QF_psInit() for publish-subscribe functionality
+9. Event pool initialization in ascending order of event size
+
+## Implementation Details
+
+### QF Framework Initialization
+The demo follows the correct QF initialization sequence:
+1. `QF_init()` - Initialize the QF framework
+2. `QF_psInit()` - Initialize publish-subscribe system 
+3. `QF_poolInit()` - Initialize event pools (in ascending size order)
+4. Construct Active Objects
+5. `QACTIVE_START()` - Start each active object
+6. `QF_run()` - Run the QF scheduler
+
+### Event Pool Management
+The demo uses multiple event pools for different event types:
+- **Basic QEvt pool**: For simple events (TIMEOUT_SIG, MONITOR_CHECK_SIG)
+- **SensorDataEvt pool**: For sensor data events
+- **ProcessorResultEvt pool**: For processor result events  
+- **WorkerWorkEvt pool**: For worker work events
+
+**Critical**: Event pools must be initialized in ascending order of event size to prevent assertion failures in QF_new_().
 
 ## Migration from QXK
 
@@ -159,6 +183,22 @@ This demo was migrated from a QXK-based implementation to use only QActive objec
 - **QXThread_delay()** → **QTimeEvt** for timing
 - **QXThread_queueGet()** → **QActive event dispatch**
 - **Preemptive threads** → **Cooperative active objects**
+
+### Common Issues and Solutions
+
+**Problem**: Assertion failure in `qf_dyn` at line 201/210
+**Cause**: Missing QF_psInit() call or incorrect event pool setup
+**Solution**: 
+1. Add QF_psInit() call after QF_init()
+2. Ensure event pools are initialized in ascending order of event size
+3. Include a basic QEvt pool for simple events
+
+**Problem**: Event allocation failures
+**Cause**: Event pools not sized correctly or missing event types
+**Solution**: 
+1. Add sufficient event pools for all event types
+2. Size pools appropriately for expected event load
+3. Initialize pools in correct order (small to large events)
 
 ## See Also
 
