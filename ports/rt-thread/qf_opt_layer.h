@@ -32,16 +32,6 @@
 #ifndef QF_OPT_LAYER_H_
 #define QF_OPT_LAYER_H_
 
-/* Platform-private extension for QEvt */
-#ifdef Q_EVT_TARGET
-/*! Target pointer for fast-path dispatch
-* @private @memberof QEvt
-*/
-#define QEvt_TARGET_EXTENSION  void *target;
-#else
-#define QEvt_TARGET_EXTENSION
-#endif
-
 /*! Configuration macro for staging buffer size */
 #ifndef QF_STAGING_BUFFER_SIZE
 #define QF_STAGING_BUFFER_SIZE 32U
@@ -57,11 +47,12 @@ void QF_initOptLayer(void);
 /*! Check if AO is eligible for fast-path dispatch */
 bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e);
 
-/*! Zero-copy post using staging buffer */
-bool QF_zeroCopyPost(QActive * const me, QEvt const * const e);
 
 /*! ISR wrapper for fast-path dispatch */
 bool QF_postFromISR(QActive * const me, QEvt const * const e);
+
+/*! ISR wrapper for publish-subscribe events */
+void QF_publishFromISR(QEvt const * const e, void const * const sender);
 
 /*! Get lost event count */
 uint32_t QF_getLostEventCount(void);

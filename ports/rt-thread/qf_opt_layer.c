@@ -31,7 +31,7 @@
 */
 #define QP_IMPL           /* this is QP implementation */
 #include "qf_port.h"      /* QF port */
-#include "qf_pkg.h"
+#include "qf_pkg.h"       /* QF package-scope interface */
 #include "qassert.h"
 #ifdef Q_SPY              /* QS software tracing enabled? */
     #include "qs_port.h"  /* QS port */
@@ -74,65 +74,13 @@ static void QF_idleHook(void);
 
 /*..........................................................................*/
 bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e) {
-    /* Disable fast-path dispatch to ensure proper AO threading semantics */
+    /* Fast-path dispatch is disabled - all events use unified staging buffer */
     Q_UNUSED_PAR(me);
     Q_UNUSED_PAR(e);
     return false;
 }
 
-/*..........................................................................*/
-bool QF_zeroCopyPost(QActive * const me, QEvt const * const e) {
-    uint32_t rear = l_stagingBuffer.rear;
-    uint32_t next = (rear + 1U) % QF_STAGING_BUFFER_SIZE;
-    
-    /* Check if buffer is full */
-    if (next == l_stagingBuffer.front) {
-        /* Buffer full - increment lost event counter */
-        __sync_fetch_and_add(&l_stagingBuffer.lostEvtCnt, 1U);
-        
-        /* Optional fallback to rt_mb_send() */
-        QF_CRIT_STAT_
-        QF_CRIT_E_();
-        
-        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST_ATTEMPT, me->prio)
-            QS_TIME_PRE_();
-            QS_SIG_PRE_(e->sig);
-            QS_OBJ_PRE_(me);
-            QS_2U8_PRE_(e->poolId_, e->refCtr_);
-            QS_U32_PRE_(l_stagingBuffer.lostEvtCnt);
-        QS_END_NOCRIT_PRE_()
-        
-        if (e->poolId_ != 0U) {
-            QEvt_refCtr_inc_(e);
-        }
-        
-        QF_CRIT_X_();
-        
-        /* Fallback to normal mailbox */
-        rt_err_t result = rt_mb_send(&me->eQueue, (rt_ubase_t)e);
-        return (result == RT_EOK);
-    }
-    
-    /* Store event and target in ring buffer */
-    l_stagingBuffer.buffer[rear].evt = e;
-    l_stagingBuffer.buffer[rear].target = me;
-    
-    /* Update rear index atomically */
-    __sync_fetch_and_add(&l_stagingBuffer.rear, 1U);
-    if (l_stagingBuffer.rear >= QF_STAGING_BUFFER_SIZE) {
-        l_stagingBuffer.rear = 0U;
-    }
-    
-    /* Increment reference counter for dynamic events */
-    if (e->poolId_ != 0U) {
-        QEvt_refCtr_inc_(e);
-    }
-    
-    /* Signal the dispatcher thread (outside critical section) */
-    rt_sem_release(&l_stagingBuffer.sem);
-    
-    return true;
-}
+
 
 /*..........................................................................*/
 void QF_initOptLayer(void) {
@@ -141,7 +89,7 @@ void QF_initOptLayer(void) {
     l_stagingBuffer.front = 0U;
     l_stagingBuffer.rear = 0U;
     l_stagingBuffer.lostEvtCnt = 0U;
-    l_stagingBuffer.enabled = false;  /* Disable optimization layer to ensure proper AO threading */
+    l_stagingBuffer.enabled = true;  /* Enable optimization layer for unified event handling */
     
     /* Initialize semaphore */
     rt_sem_init(&l_stagingBuffer.sem, "qf_opt_sem", 0, RT_IPC_FLAG_FIFO);
@@ -177,7 +125,10 @@ static void dispatcherThread(void *parameter) {
 
 /*..........................................................................*/
 static void QF_dispatchBatchedEvents(void) {
-    while (l_stagingBuffer.front != l_stagingBuffer.rear) {
+    uint32_t batchCount = 0;
+    
+    /* Process all available events in batch */
+    while (l_stagingBuffer.front != l_stagingBuffer.rear && batchCount < QF_STAGING_BUFFER_SIZE) {
         /* Get event from front of buffer */
         uint32_t front = l_stagingBuffer.front;
         QEvt const *e = l_stagingBuffer.buffer[front].evt;
@@ -186,31 +137,120 @@ static void QF_dispatchBatchedEvents(void) {
         /* Update front index atomically */
         l_stagingBuffer.front = (front + 1U) % QF_STAGING_BUFFER_SIZE;
         
-        /* Post to target AO's queue instead of direct dispatch */
+        /* Post to target AO's queue - unified event handling */
         if (targetAO != (QActive *)0) {
-            /* Use ISR-safe mailbox posting */
+            /* Use RT-Thread mailbox posting for thread-safe delivery */
             rt_mb_send(&targetAO->eQueue, (rt_ubase_t)e);
-        }
-        else {
+        } else {
             /* If no target, garbage collect the event */
             QF_gc(e);
         }
+        
+        batchCount++;
     }
 }
 
 /*..........................................................................*/
 bool QF_postFromISR(QActive * const me, QEvt const * const e) {
-    /* From ISR, always post to queue - no direct dispatch */
-    /* Use ISR-safe mailbox posting */
+    /* From ISR, always use staging buffer - unified event handling channel */
+    uint32_t rear = l_stagingBuffer.rear;
+    uint32_t next = (rear + 1U) % QF_STAGING_BUFFER_SIZE;
     
-    if (e->poolId_ != 0U) { /* is it a pool event? */
-        QEvt_refCtr_inc_(e); /* increment the reference counter */
+    /* Check if buffer is full */
+    if (next == l_stagingBuffer.front) {
+        /* Buffer full - increment lost event counter */
+        __sync_fetch_and_add(&l_stagingBuffer.lostEvtCnt, 1U);
+        return false;
     }
-
-    /* ISR-safe posting using RT-Thread mailbox */
-    rt_err_t result = rt_mb_send(&me->eQueue, (rt_ubase_t)e);
     
-    return (result == RT_EOK);
+    /* Store event and target in staging buffer (zero-copy) */
+    l_stagingBuffer.buffer[rear].evt = e;
+    l_stagingBuffer.buffer[rear].target = me;
+    
+    /* Update rear index atomically */
+    __sync_fetch_and_add(&l_stagingBuffer.rear, 1U);
+    if (l_stagingBuffer.rear >= QF_STAGING_BUFFER_SIZE) {
+        l_stagingBuffer.rear = 0U;
+    }
+    
+    /* Increment reference counter for dynamic events */
+    if (e->poolId_ != 0U) {
+        QEvt_refCtr_inc_(e);
+    }
+    
+    /* Signal the dispatcher thread (ISR-safe) */
+    rt_sem_release(&l_stagingBuffer.sem);
+    
+    return true;
+}
+
+/*..........................................................................*/
+void QF_publishFromISR(QEvt const * const e, void const * const sender) {
+    Q_REQUIRE_ID(200, e->sig < (QSignal)QActive_maxPubSignal_);
+    Q_UNUSED_PAR(sender);
+    
+    QF_CRIT_STAT_
+    QF_CRIT_E_();
+    
+    /* Make a local copy of the subscriber list */
+    QPSet subscrList = QActive_subscrList_[e->sig];
+    
+    /* Increment reference counter for dynamic events */
+    if (e->poolId_ != 0U) {
+        QEvt_refCtr_inc_(e);
+    }
+    
+    QF_CRIT_X_();
+    
+    if (QPSet_notEmpty(&subscrList)) {
+        /* Process all subscribers through unified staging buffer */
+        uint_fast8_t p = QPSet_findMax(&subscrList);
+        
+        do {
+            QActive *a = QActive_registry_[p];
+            Q_ASSERT_ID(210, a != (QActive *)0);
+            
+            /* Use unified staging buffer for all ISR events */
+            uint32_t rear = l_stagingBuffer.rear;
+            uint32_t next = (rear + 1U) % QF_STAGING_BUFFER_SIZE;
+            
+            /* Check if buffer is full */
+            if (next != l_stagingBuffer.front) {
+                /* Store event and target in staging buffer */
+                l_stagingBuffer.buffer[rear].evt = e;
+                l_stagingBuffer.buffer[rear].target = a;
+                
+                /* Update rear index atomically */
+                __sync_fetch_and_add(&l_stagingBuffer.rear, 1U);
+                if (l_stagingBuffer.rear >= QF_STAGING_BUFFER_SIZE) {
+                    l_stagingBuffer.rear = 0U;
+                }
+                
+                /* Increment reference counter for each subscriber */
+                if (e->poolId_ != 0U) {
+                    QEvt_refCtr_inc_(e);
+                }
+            } else {
+                /* Buffer full - increment lost event counter */
+                __sync_fetch_and_add(&l_stagingBuffer.lostEvtCnt, 1U);
+            }
+            
+            QPSet_remove(&subscrList, p);
+            if (QPSet_notEmpty(&subscrList)) {
+                p = QPSet_findMax(&subscrList);
+            } else {
+                p = 0U;
+            }
+        } while (p != 0U);
+    }
+    
+    /* Signal dispatcher thread once after processing all subscriptions */
+    rt_sem_release(&l_stagingBuffer.sem);
+    
+    /* Garbage collection for the original event */
+    #if (QF_MAX_EPOOL > 0U)
+    QF_gc(e);
+    #endif
 }
 
 /*..........................................................................*/
@@ -230,20 +270,9 @@ void QF_disableOptLayer(void) {
 
 /*..........................................................................*/
 static void QF_idleHook(void) {
-    /* Only check if optimization layer is enabled */
-    if (!l_stagingBuffer.enabled) {
-        return;
-    }
-    
-    /* Check if staging buffer has pending events (atomic read) */
-    uint32_t front = l_stagingBuffer.front;
-    uint32_t rear = l_stagingBuffer.rear;
-    
-    if (front != rear) {
-        /* There are pending events, signal the dispatcher thread
-         * This ensures that even non-ISR posted events get processed
-         * when the system becomes idle
-         */
+    /* Check if staging buffer has pending events */
+    if (l_stagingBuffer.enabled && (l_stagingBuffer.front != l_stagingBuffer.rear)) {
+        /* Signal the dispatcher thread to process pending events */
         rt_sem_release(&l_stagingBuffer.sem);
     }
 }
