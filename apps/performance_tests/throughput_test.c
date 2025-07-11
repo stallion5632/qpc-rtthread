@@ -62,14 +62,9 @@ static QState ThroughputConsumerAO_initial(ThroughputConsumerAO * const me, QEvt
 static QState ThroughputConsumerAO_idle(ThroughputConsumerAO * const me, QEvt const * const e);
 static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QEvt const * const e);
 
-/* Producer QXThread */
-typedef struct {
-    QXThread super;
-    uint32_t packets_produced;
-} ProducerThread;
-
-static ProducerThread l_producerThread;
-static void ProducerThread_run(QXThread * const me);
+/* Producer thread function */
+static void producer_thread_func(void *parameter);
+static rt_thread_t producer_thread = RT_NULL;
 
 /*==========================================================================*/
 /* Active Object Constructors */
@@ -159,18 +154,16 @@ static QState ThroughputProducerAO_idle(ThroughputProducerAO * const me, QEvt co
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
             
-            /* Create producer QXThread with smaller stack for embedded */
-            ProducerThread_ctor();
-            
-            /* Start producer QXThread */
-            static QEvt const *producerQueue[10];
-            static uint8_t producerStack[1024];
-            
-            QXTHREAD_START(&l_producerThread.super,
-                          LOAD_THREAD_PRIO,
-                          producerQueue, Q_DIM(producerQueue),
-                          producerStack, sizeof(producerStack),
-                          (void *)0);
+            /* Create producer thread with smaller stack for embedded */
+            producer_thread = rt_thread_create("producer",
+                                               producer_thread_func,
+                                               RT_NULL,
+                                               1024,  /* Reduced from 2048 */
+                                               LOAD_THREAD_PRIO,
+                                               20);
+            if (producer_thread != RT_NULL) {
+                rt_thread_startup(producer_thread);
+            }
             
             status = Q_TRAN(&ThroughputProducerAO_producing);
             break;
@@ -427,17 +420,8 @@ static QState ThroughputConsumerAO_consuming(ThroughputConsumerAO * const me, QE
 /* Producer Thread Function */
 /*==========================================================================*/
 
-static void ProducerThread_ctor(void) {
-    ProducerThread *me = &l_producerThread;
-    
-    QXThread_ctor(&me->super, &ProducerThread_run, 0);
-    me->packets_produced = 0;
-}
-
-static void ProducerThread_run(QXThread * const me) {
-    ProducerThread *pt = (ProducerThread *)me;
-    
-    rt_kprintf("Producer QXThread: Started\n");
+static void producer_thread_func(void *parameter) {
+    (void)parameter;
     
     uint32_t packet_id = 0;
     
@@ -448,15 +432,13 @@ static void ProducerThread_run(QXThread * const me) {
         evt->data_size = 1024; /* Simulate 1KB data packets */
         evt->packet_id = ++packet_id;
         
-        QACTIVE_POST(&l_producerAO.super, &evt->super, me);
-        
-        pt->packets_produced++;
+        QACTIVE_POST(&l_producerAO.super, &evt->super, &l_producerAO);
         
         /* Small delay to avoid overwhelming the system */
-        QXThread_delay(1); /* 10ms delay using QXK API */
+        rt_thread_mdelay(1);
     }
     
-    rt_kprintf("Producer QXThread: Exiting, produced %u packets\n", pt->packets_produced);
+    rt_kprintf("Producer thread exiting\n");
 }
 
 /*==========================================================================*/

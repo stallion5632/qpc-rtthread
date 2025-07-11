@@ -54,21 +54,11 @@ static QState JitterAO_initial(JitterAO * const me, QEvt const * const e);
 static QState JitterAO_idle(JitterAO * const me, QEvt const * const e);
 static QState JitterAO_measuring(JitterAO * const me, QEvt const * const e);
 
-/* Load QXThreads */
-typedef struct {
-    QXThread super;
-    uint32_t load_count;
-} LoadThread1;
-
-typedef struct {
-    QXThread super;
-    uint32_t load_count;
-} LoadThread2;
-
-static LoadThread1 l_loadThread1;
-static LoadThread2 l_loadThread2;
-static void LoadThread1_run(QXThread * const me);
-static void LoadThread2_run(QXThread * const me);
+/* Load thread functions */
+static void load_thread1_func(void *parameter);
+static void load_thread2_func(void *parameter);
+static rt_thread_t load_thread1 = RT_NULL;
+static rt_thread_t load_thread2 = RT_NULL;
 
 /*==========================================================================*/
 /* Active Object Constructor */
@@ -94,32 +84,8 @@ static void JitterAO_ctor(void) {
 /* Load Thread Functions */
 /*==========================================================================*/
 
-/*==========================================================================*/
-/* QXThread Constructors */
-/*==========================================================================*/
-
-static void LoadThread1_ctor(void) {
-    LoadThread1 *me = &l_loadThread1;
-    
-    QXThread_ctor(&me->super, &LoadThread1_run, 0);
-    me->load_count = 0;
-}
-
-static void LoadThread2_ctor(void) {
-    LoadThread2 *me = &l_loadThread2;
-    
-    QXThread_ctor(&me->super, &LoadThread2_run, 0);
-    me->load_count = 0;
-}
-
-/*==========================================================================*/
-/* QXThread Functions */
-/*==========================================================================*/
-
-static void LoadThread1_run(QXThread * const me) {
-    LoadThread1 *lt1 = (LoadThread1 *)me;
-    
-    rt_kprintf("Load QXThread 1: Started\n");
+static void load_thread1_func(void *parameter) {
+    (void)parameter;
     
     volatile uint32_t dummy = 0;
     
@@ -129,17 +95,14 @@ static void LoadThread1_run(QXThread * const me) {
             dummy = dummy * 2 + 1;
         }
         
-        lt1->load_count++;
-        QXThread_delay(1); /* 10ms delay using QXK API */
+        rt_thread_mdelay(10);
     }
     
-    rt_kprintf("Load QXThread 1: Exiting, load cycles: %u\n", lt1->load_count);
+    rt_kprintf("Load thread 1 exiting\n");
 }
 
-static void LoadThread2_run(QXThread * const me) {
-    LoadThread2 *lt2 = (LoadThread2 *)me;
-    
-    rt_kprintf("Load QXThread 2: Started\n");
+static void load_thread2_func(void *parameter) {
+    (void)parameter;
     
     volatile uint32_t dummy = 0;
     
@@ -149,11 +112,10 @@ static void LoadThread2_run(QXThread * const me) {
             dummy = dummy ^ (dummy << 1);
         }
         
-        lt2->load_count++;
-        QXThread_delay(2); /* 15ms delay using QXK API */
+        rt_thread_mdelay(15);
     }
     
-    rt_kprintf("Load QXThread 2: Exiting, load cycles: %u\n", lt2->load_count);
+    rt_kprintf("Load thread 2 exiting\n");
 }
 
 /*==========================================================================*/
@@ -225,27 +187,25 @@ static QState JitterAO_idle(JitterAO * const me, QEvt const * const e) {
             QTimeEvt_armX(&me->timerEvt, me->expected_interval, me->expected_interval);
             
             /* Create load threads to introduce jitter */
-            /* Create load QXThreads */
-            LoadThread1_ctor();
-            LoadThread2_ctor();
+            load_thread1 = rt_thread_create("load1",
+                                           load_thread1_func,
+                                           RT_NULL,
+                                           2048,
+                                           LOAD_THREAD_PRIO,
+                                           20);
+            if (load_thread1 != RT_NULL) {
+                rt_thread_startup(load_thread1);
+            }
             
-            /* Start load QXThreads */
-            static QEvt const *loadThread1Queue[10];
-            static uint8_t loadThread1Stack[2048];
-            static QEvt const *loadThread2Queue[10];
-            static uint8_t loadThread2Stack[2048];
-            
-            QXTHREAD_START(&l_loadThread1.super,
-                          LOAD_THREAD_PRIO,
-                          loadThread1Queue, Q_DIM(loadThread1Queue),
-                          loadThread1Stack, sizeof(loadThread1Stack),
-                          (void *)0);
-            
-            QXTHREAD_START(&l_loadThread2.super,
-                          LOAD_THREAD_PRIO + 1,
-                          loadThread2Queue, Q_DIM(loadThread2Queue),
-                          loadThread2Stack, sizeof(loadThread2Stack),
-                          (void *)0);
+            load_thread2 = rt_thread_create("load2",
+                                           load_thread2_func,
+                                           RT_NULL,
+                                           2048,
+                                           LOAD_THREAD_PRIO + 1,
+                                           20);
+            if (load_thread2 != RT_NULL) {
+                rt_thread_startup(load_thread2);
+            }
             
             status = Q_TRAN(&JitterAO_measuring);
             break;
