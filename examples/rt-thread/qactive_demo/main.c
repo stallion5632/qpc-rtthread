@@ -74,7 +74,7 @@ ALIGN(RT_ALIGN_SIZE) static rt_uint8_t monitorStackSto[MONITOR_STACK_SIZE];     
 /* Event pools must be initialized in ascending order of event size. */
 /* Only one pool is allowed for events of the same size. */
 ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(QEvt) basicEventPool[20];              /* 4-byte event pool for QEvt only */
-ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(SensorDataEvt) shared8Pool[30];        /* 8-byte event pool shared by SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt */
+ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(SensorDataEvt) shared16Pool[30];        /* 16-byte event pool shared by SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt */
 
 /*
  * Version information
@@ -355,10 +355,10 @@ static rt_err_t ao_init(void)
     rt_kprintf("sizeof(SensorDataEvt)=%d\n", (int)sizeof(SensorDataEvt));
     rt_kprintf("sizeof(WorkerWorkEvt)=%d\n", (int)sizeof(WorkerWorkEvt));
 
-    /* Initialize event pools. All 8-byte events use shared8Pool. */
+    /* Initialize event pools. All 16-byte events use shared16Pool. */
     QF_poolInit(basicEventPool, sizeof(basicEventPool), sizeof(QEvt));
     rt_kprintf("[System] Initializing basic event pool...\n");
-    QF_poolInit(shared8Pool, sizeof(shared8Pool), sizeof(SensorDataEvt));
+    QF_poolInit(shared16Pool, sizeof(shared16Pool), sizeof(SensorDataEvt));
     rt_kprintf("[System] Initializing shared 8-byte event pool for SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt...\n");
 
     /* Initialize RT-Thread integration */
