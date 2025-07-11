@@ -77,7 +77,6 @@ static QF_DispatcherStrategy const *l_policy = &QF_defaultStrategy;
 
 /* Forward declarations */
 static void dispatcherThreadEntry(void *parameter);
-static void QF_dispatchBatchedEvents(void);
 static void QF_idleHook(void);
 static bool QF_addToStagingBuffer(QF_PrioLevel prioLevel, QEvt const *evt, QActive *target);
 static uint32_t QF_popAllFromStagingBuffer(QF_PrioLevel prioLevel, 
