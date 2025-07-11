@@ -1,5 +1,108 @@
 ![QP Framework](doxygen/images/qp_banner.jpg)
 
+# QP/C for RT-Thread
+
+This is a specialized port of the QP/C framework for RT-Thread RTOS with unified event handling optimizations.
+
+## Key Features
+
+### 1. Unified Event Handling Channel
+All events from interrupt service routines (ISR) follow a single, safe, and efficient processing path:
+
+```
+ISR Event → Staging Buffer → Dispatcher Thread → AO Mailbox → Target AO Thread
+```
+
+### 2. Zero-Copy Event Passing
+Events are passed as pointers through the staging buffer without data copying, ensuring efficient memory usage.
+
+### 3. Batch Processing for High-Frequency Interrupts
+The dispatcher thread processes multiple events in batches to minimize context switching overhead.
+
+## Event Flow Architecture
+
+### Normal Thread Context Events
+```
+Application Thread → QActive_post_() → RT-Thread Mailbox → Target AO Thread
+```
+
+### ISR Context Events
+```
+ISR → QF_postFromISR() → Staging Buffer → Dispatcher Thread → RT-Thread Mailbox → Target AO Thread
+```
+
+## Sequence Diagram
+
+```
+ISR                 Staging Buffer    Dispatcher Thread    Target AO Thread
+ |                       |                    |                 |
+ |--[Event Pointer]----->|                    |                 |
+ |                       |                    |                 |
+ |--[Signal Semaphore]-->|                    |                 |
+ |                       |                    |                 |
+ |                       |<--[Wait for Sem]---|                 |
+ |                       |                    |                 |
+ |                       |--[Batch Events]--->|                 |
+ |                       |                    |                 |
+ |                       |                    |--[Post Event]-->|
+ |                       |                    |                 |
+ |                       |                    |                 |--[Process Event]
+```
+
+## Configuration
+
+### Staging Buffer Size
+```c
+#define QF_STAGING_BUFFER_SIZE 32U  // Configurable via qf_port.h
+```
+
+### Dispatcher Thread Priority
+```c
+#define QF_DISPATCHER_PRIORITY 0U   // Highest priority for real-time processing
+```
+
+## Safety Features
+
+- **Atomic Operations**: All staging buffer operations use atomic instructions
+- **Overflow Protection**: Lost event counter tracks buffer overflow conditions
+- **ISR-Safe**: All ISR functions use RT-Thread's ISR-safe primitives
+- **No Fast-Path Dispatch**: Eliminates race conditions from direct ISR dispatch
+
+## Performance Benefits
+
+1. **Reduced Context Switching**: Batch processing minimizes thread context switches
+2. **Predictable Latency**: Unified event path provides consistent timing
+3. **Memory Efficiency**: Zero-copy event passing reduces memory overhead
+4. **Scalability**: Handles high-frequency interrupt scenarios efficiently
+
+## Usage
+
+Initialize the optimization layer during system startup:
+```c
+QF_init();
+QF_run();  // Automatically initializes the unified event handling
+```
+
+Post events from ISR:
+```c
+void my_isr_handler(void) {
+    QEvt const *e = Q_NEW(MyEvt, MY_SIGNAL);
+    QF_postFromISR(target_ao, e);  // Safe ISR posting
+}
+```
+
+## Thread Safety
+
+The implementation ensures thread safety through:
+- RT-Thread critical sections for shared data
+- Atomic operations for staging buffer indices
+- ISR-safe semaphore operations
+- Proper reference counting for dynamic events
+
+# Original QP/C Documentation
+
+The sections below contain the original QP/C documentation.
+
 # What's New?
 
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/QuantumLeaps/qpc)](https://github.com/QuantumLeaps/qpc/releases/latest)
@@ -88,7 +191,7 @@ uC/OS-II and TI-RTOS, as well as with (embedded) Linux (POSIX) and Windows.
 
 ## Popularity and Maturity
 With 20 years of continuous development, over [350 commercial licensees][Cust],
-and many times more open source users worldwide, the QP� frameworks are the
+and many times more open source users worldwide, the QP� frameworks are the
 most popular such offering on the market. They power countless electronic
 products ranging from implantable medical devices to complex weapon systems.
 

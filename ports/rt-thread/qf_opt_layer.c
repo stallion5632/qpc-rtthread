@@ -72,13 +72,7 @@ static void dispatcherThread(void *parameter);
 static void QF_dispatchBatchedEvents(void);
 static void QF_idleHook(void);
 
-/*..........................................................................*/
-bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e) {
-    /* Fast-path dispatch is disabled - all events use unified staging buffer */
-    Q_UNUSED_PAR(me);
-    Q_UNUSED_PAR(e);
-    return false;
-}
+
 
 
 
@@ -184,74 +178,7 @@ bool QF_postFromISR(QActive * const me, QEvt const * const e) {
     return true;
 }
 
-/*..........................................................................*/
-void QF_publishFromISR(QEvt const * const e, void const * const sender) {
-    Q_REQUIRE_ID(200, e->sig < (QSignal)QActive_maxPubSignal_);
-    Q_UNUSED_PAR(sender);
-    
-    QF_CRIT_STAT_
-    QF_CRIT_E_();
-    
-    /* Make a local copy of the subscriber list */
-    QPSet subscrList = QActive_subscrList_[e->sig];
-    
-    /* Increment reference counter for dynamic events */
-    if (e->poolId_ != 0U) {
-        QEvt_refCtr_inc_(e);
-    }
-    
-    QF_CRIT_X_();
-    
-    if (QPSet_notEmpty(&subscrList)) {
-        /* Process all subscribers through unified staging buffer */
-        uint_fast8_t p = QPSet_findMax(&subscrList);
-        
-        do {
-            QActive *a = QActive_registry_[p];
-            Q_ASSERT_ID(210, a != (QActive *)0);
-            
-            /* Use unified staging buffer for all ISR events */
-            uint32_t rear = l_stagingBuffer.rear;
-            uint32_t next = (rear + 1U) % QF_STAGING_BUFFER_SIZE;
-            
-            /* Check if buffer is full */
-            if (next != l_stagingBuffer.front) {
-                /* Store event and target in staging buffer */
-                l_stagingBuffer.buffer[rear].evt = e;
-                l_stagingBuffer.buffer[rear].target = a;
-                
-                /* Update rear index atomically */
-                __sync_fetch_and_add(&l_stagingBuffer.rear, 1U);
-                if (l_stagingBuffer.rear >= QF_STAGING_BUFFER_SIZE) {
-                    l_stagingBuffer.rear = 0U;
-                }
-                
-                /* Increment reference counter for each subscriber */
-                if (e->poolId_ != 0U) {
-                    QEvt_refCtr_inc_(e);
-                }
-            } else {
-                /* Buffer full - increment lost event counter */
-                __sync_fetch_and_add(&l_stagingBuffer.lostEvtCnt, 1U);
-            }
-            
-            QPSet_remove(&subscrList, p);
-            if (QPSet_notEmpty(&subscrList)) {
-                p = QPSet_findMax(&subscrList);
-            } else {
-                p = 0U;
-            }
-        } while (p != 0U);
-    }
-    
-    /* Signal dispatcher thread once after processing all subscriptions */
-    rt_sem_release(&l_stagingBuffer.sem);
-    
-    /* Garbage collection for the original event */
-    #if (QF_MAX_EPOOL > 0U)
-    QF_gc(e);
-    #endif
-}
+
 
 /*..........................................................................*/
 uint32_t QF_getLostEventCount(void) {

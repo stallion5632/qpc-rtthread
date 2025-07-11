@@ -44,15 +44,9 @@
 /*! Initialize the optimization layer */
 void QF_initOptLayer(void);
 
-/*! Check if AO is eligible for fast-path dispatch */
-bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e);
-
 
 /*! ISR wrapper for fast-path dispatch */
 bool QF_postFromISR(QActive * const me, QEvt const * const e);
-
-/*! ISR wrapper for publish-subscribe events */
-void QF_publishFromISR(QEvt const * const e, void const * const sender);
 
 /*! Get lost event count */
 uint32_t QF_getLostEventCount(void);
