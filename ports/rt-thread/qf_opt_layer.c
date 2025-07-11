@@ -74,23 +74,9 @@ static void QF_idleHook(void);
 
 /*..........................................................................*/
 bool QF_isEligibleForFastPath(QActive const * const me, QEvt const * const e) {
-    /* Check if optimization layer is enabled */
-    if (!l_stagingBuffer.enabled) {
-        return false;
-    }
-    
-    /* Check if the target AO thread is ready for fast dispatch */
-    rt_thread_t targetThread = (rt_thread_t)&me->thread;
-    
-    /* Use rt_thread_ready() instead of accessing thread.stat directly */
-    /* For now, simplified check - in real implementation check thread readiness */
-    if (targetThread != RT_NULL) {
-        /* Fast path is eligible for:
-         * 1. Immutable events (e->poolId_ == 0)
-         * 2. Dynamic events (e->poolId_ != 0) - extended eligibility
-         */
-        return true;
-    }
+    /* Disable fast-path dispatch to ensure proper AO threading semantics */
+    Q_UNUSED_PAR(me);
+    Q_UNUSED_PAR(e);
     return false;
 }
 
@@ -155,7 +141,7 @@ void QF_initOptLayer(void) {
     l_stagingBuffer.front = 0U;
     l_stagingBuffer.rear = 0U;
     l_stagingBuffer.lostEvtCnt = 0U;
-    l_stagingBuffer.enabled = true;  /* Enable optimization layer by default */
+    l_stagingBuffer.enabled = false;  /* Disable optimization layer to ensure proper AO threading */
     
     /* Initialize semaphore */
     rt_sem_init(&l_stagingBuffer.sem, "qf_opt_sem", 0, RT_IPC_FLAG_FIFO);
@@ -200,11 +186,13 @@ static void QF_dispatchBatchedEvents(void) {
         /* Update front index atomically */
         l_stagingBuffer.front = (front + 1U) % QF_STAGING_BUFFER_SIZE;
         
-        /* Directly dispatch to target AO without posting back to mailbox */
+        /* Post to target AO's queue instead of direct dispatch */
         if (targetAO != (QActive *)0) {
-            QHSM_DISPATCH(&targetAO->super, e, targetAO->prio);
-            
-            /* Garbage collect the event */
+            /* Use ISR-safe mailbox posting */
+            rt_mb_send(&targetAO->eQueue, (rt_ubase_t)e);
+        }
+        else {
+            /* If no target, garbage collect the event */
             QF_gc(e);
         }
     }
@@ -212,15 +200,17 @@ static void QF_dispatchBatchedEvents(void) {
 
 /*..........................................................................*/
 bool QF_postFromISR(QActive * const me, QEvt const * const e) {
-    /* Check if eligible for fast-path dispatch */
-    if (QF_isEligibleForFastPath(me, e)) {
-        /* Fast-path dispatch from ISR */
-        QHSM_DISPATCH(&me->super, e, me->prio);
-        return true;
-    }
+    /* From ISR, always post to queue - no direct dispatch */
+    /* Use ISR-safe mailbox posting */
     
-    /* Fallback to zero-copy post if fast path not available */
-    return QF_zeroCopyPost(me, e);
+    if (e->poolId_ != 0U) { /* is it a pool event? */
+        QEvt_refCtr_inc_(e); /* increment the reference counter */
+    }
+
+    /* ISR-safe posting using RT-Thread mailbox */
+    rt_err_t result = rt_mb_send(&me->eQueue, (rt_ubase_t)e);
+    
+    return (result == RT_EOK);
 }
 
 /*..........................................................................*/
