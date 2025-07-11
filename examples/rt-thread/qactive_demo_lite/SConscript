@@ -1,0 +1,20 @@
+import rtconfig
+from building import *
+
+cwd = GetCurrentDir()
+
+# QActive Demo source files
+src = Split("""
+main.c
+""")
+
+# Include paths
+path = [cwd]
+
+# Define the QActive demo group
+# This group depends on QPC without QXK kernel support
+group = DefineGroup('qpc_qactive_demo', src,
+                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO', 'RT_USING_FINSH'],
+                   CPPPATH = path)
+
+Return('group')
