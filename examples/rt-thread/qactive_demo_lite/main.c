@@ -424,8 +424,8 @@ static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e) {
 /* Initialize event pools - must be in ascending order of event size */
 /* Event pools must be initialized in ascending order of event size. */
 /* Only one pool is allowed for events of the same size. */
-ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(QEvt) basicEventPool[20];              /* 4-byte event pool for QEvt only */
-ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(SensorDataEvt) shared8Pool[30];        /* 8-byte event pool shared by SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt */
+ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(QEvt) basicEventPool[50];              /* 4-byte event pool for QEvt only */
+ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(SensorDataEvt) shared8Pool[60];        /* 8-byte event pool shared by SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt */
 
 /*==========================================================================*/
 /* QActive Demo Initialization */

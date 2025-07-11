@@ -43,9 +43,6 @@
 #define QF_CRIT_ENTRY(stat_)  (rt_enter_critical())
 #define QF_CRIT_EXIT(stat_)   (rt_exit_critical())
 
-/* Enable QEvt target extension for fast-path dispatch */
-#define Q_EVT_TARGET
-
 /* QF optimization layer configuration */
 #ifndef QF_STAGING_BUFFER_SIZE
 #define QF_STAGING_BUFFER_SIZE 32U  /*!< Configurable staging buffer size */

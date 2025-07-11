@@ -139,29 +139,6 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
     bool status;
     QF_CRIT_STAT_
 
-    /* Check if eligible for fast-path dispatch */
-    if (QF_isEligibleForFastPath(me, e)) {
-        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, me->prio)
-            QS_TIME_PRE_();
-            QS_SIG_PRE_(e->sig);
-            QS_OBJ_PRE_(me);
-            QS_STR_PRE_("FAST_PATH");
-        QS_END_NOCRIT_PRE_()
-
-        /* Fast-path dispatch - direct call to state machine */
-        QHSM_DISPATCH(&me->super, e, me->prio);
-        return true;
-    }
-
-    /* Try zero-copy post if margin allows it */
-    if (margin == QF_NO_MARGIN) {
-        /* For critical events, try zero-copy post first */
-        if (QF_zeroCopyPost(me, e)) {
-            return true;
-        }
-        /* If zero-copy failed, fall back to normal mailbox */
-    }
-
     QF_CRIT_E_();
     nFree = (uint_fast16_t)(me->eQueue.size - me->eQueue.entry);
 
@@ -182,46 +159,28 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
     }
 
     if (status) { /* can post the event? */
-        /* Check if eligible for fast-path dispatch */
-        if ((e->poolId_ == 0U) && QF_isEligibleForFastPath(me, e)) {
-            QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, me->prio)
-                QS_TIME_PRE_();       /* timestamp */
-                QS_OBJ_PRE_(sender);  /* the sender object */
-                QS_SIG_PRE_(e->sig);  /* the signal of the event */
-                QS_OBJ_PRE_(me);      /* this active object (recipient) */
-                QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
-                QS_EQC_PRE_(nFree);   /* # free entries available */
-                QS_EQC_PRE_(0U);      /* min # free entries (unknown) */
-            QS_END_NOCRIT_PRE_()
+        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, me->prio)
+            QS_TIME_PRE_();       /* timestamp */
+            QS_OBJ_PRE_(sender);  /* the sender object */
+            QS_SIG_PRE_(e->sig);  /* the signal of the event */
+            QS_OBJ_PRE_(me);      /* this active object (recipient) */
+            QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
+            QS_EQC_PRE_(nFree);   /* # free entries available */
+            QS_EQC_PRE_(0U);      /* min # free entries (unknown) */
+        QS_END_NOCRIT_PRE_()
 
-            if (e->poolId_ != 0U) { /* is it a pool event? */
-                QEvt_refCtr_inc_(e); /* increment the reference counter */
-            }
-
-            QF_CRIT_X_();
-
-            /* posting to the RT-Thread message queue must succeed */
-            Q_ALLEGE_ID(520,
-                rt_mb_send(&me->eQueue, (rt_ubase_t)e)
-                == RT_EOK);
+        if (e->poolId_ != 0U) { /* is it a pool event? */
+            QEvt_refCtr_inc_(e); /* increment the reference counter */
         }
-        else {
 
-            QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST_ATTEMPT, me->prio)
-                QS_TIME_PRE_();       /* timestamp */
-                QS_OBJ_PRE_(sender);  /* the sender object */
-                QS_SIG_PRE_(e->sig);  /* the signal of the event */
-                QS_OBJ_PRE_(me);      /* this active object (recipient) */
-                QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
-                QS_EQC_PRE_(nFree);   /* # free entries available */
-                QS_EQC_PRE_(0U);      /* min # free entries (unknown) */
-            QS_END_NOCRIT_PRE_()
+        QF_CRIT_X_();
 
-            QF_CRIT_X_();
-        }
+        /* posting to the RT-Thread message queue must succeed */
+        Q_ALLEGE_ID(520,
+            rt_mb_send(&me->eQueue, (rt_ubase_t)e)
+            == RT_EOK);
     }
     else {
-
         QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST_ATTEMPT, me->prio)
             QS_TIME_PRE_();       /* timestamp */
             QS_OBJ_PRE_(sender);  /* the sender object */
@@ -233,6 +192,10 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
         QS_END_NOCRIT_PRE_()
 
         QF_CRIT_X_();
+
+        #if (QF_MAX_EPOOL > 0U)
+        QF_gc(e); /* recycle the event to avoid a leak */
+        #endif
     }
 
     return status;
