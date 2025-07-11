@@ -29,10 +29,9 @@
 #include "rt_integration.h"
 #include <finsh.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef QPC_USING_QACTIVE_DEMO
-
-Q_DEFINE_THIS_FILE
 
 /*==========================================================================*/
 /* Global RT-Thread Synchronization Objects */
