@@ -303,19 +303,33 @@ static QState ProcessorAO_processing(ProcessorAO * const me, QEvt const * const 
             rt_kprintf("[ProcessorAO_processing] Created ProcessorResultEvt with result: %u\n", result);
 
             /* Post work to worker AO (enhanced with RT-Thread extensions) */
+            rt_kprintf("[ProcessorAO_processing] About to create WorkerWorkEvt (size=%u bytes)\n", (unsigned int)sizeof(WorkerWorkEvt));
             WorkerWorkEvt *work_evt = Q_NEW(WorkerWorkEvt, WORKER_WORK_SIG);
-            work_evt->work_id = me->processed_count;
-            work_evt->data_size = sizeof(SensorDataEvt);  /* RT-Thread extension */
-            work_evt->priority = 1;                       /* RT-Thread extension */
-            rt_kprintf("[ProcessorAO_processing] Posting work to Worker AO (id=%u, size=%u, prio=%u)\n",
-                      work_evt->work_id, work_evt->data_size, work_evt->priority);
-            QACTIVE_POST(AO_Worker, &work_evt->super, me);
+            if (work_evt != (WorkerWorkEvt *)0) {
+                work_evt->work_id = me->processed_count;
+                work_evt->data_size = sizeof(SensorDataEvt);  /* RT-Thread extension */
+                work_evt->priority = 1;                       /* RT-Thread extension */
+                rt_kprintf("[ProcessorAO_processing] Posting work to Worker AO (id=%u, size=%u, prio=%u)\n",
+                          work_evt->work_id, work_evt->data_size, work_evt->priority);
+                QACTIVE_POST(AO_Worker, &work_evt->super, me);
+            } else {
+                rt_kprintf("[ProcessorAO_processing] ERROR: Failed to allocate WorkerWorkEvt!\n");
+            }
 
              /* Post work again */
+            rt_kprintf("[ProcessorAO_processing] About to create second WorkerWorkEvt\n");
             WorkerWorkEvt *work_evt2 = Q_NEW(WorkerWorkEvt, WORKER_WORK_SIG);
-            /* Distinguish by different IDs */
-            work_evt2->work_id = me->processed_count + 1000;
-            QACTIVE_POST(AO_Worker, &work_evt2->super, me);
+            if (work_evt2 != (WorkerWorkEvt *)0) {
+                /* Distinguish by different IDs */
+                work_evt2->work_id = me->processed_count + 1000;
+                work_evt2->data_size = sizeof(SensorDataEvt);  /* RT-Thread extension */
+                work_evt2->priority = 2;                       /* RT-Thread extension */
+                rt_kprintf("[ProcessorAO_processing] Posting second work to Worker AO (id=%u, size=%u, prio=%u)\n",
+                          work_evt2->work_id, work_evt2->data_size, work_evt2->priority);
+                QACTIVE_POST(AO_Worker, &work_evt2->super, me);
+            } else {
+                rt_kprintf("[ProcessorAO_processing] ERROR: Failed to allocate second WorkerWorkEvt!\n");
+            }
 
             /* Update RT-Thread integration statistics */
             if (g_config_mutex != RT_NULL) {
@@ -546,7 +560,8 @@ static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e) {
 
 /* Initialize event pools - must be in ascending order of event size */
 ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(QEvt) basicEventPool[50];              /* 4-byte event pool for QEvt only */
-ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(SensorDataEvt) shared8Pool[60];        /* 8-byte event pool shared by SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt */
+ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(SensorDataEvt) shared8Pool[60];        /* 8-byte event pool for SensorDataEvt, ProcessorResultEvt */
+ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(WorkerWorkEvt) worker16Pool[40];       /* 16-byte event pool for WorkerWorkEvt */
 
 /*==========================================================================*/
 /* QActive Demo Initialization (Enhanced from lite version) */
@@ -578,11 +593,13 @@ void QActiveDemo_init(void) {
     rt_kprintf("[QActiveDemo_init] sizeof(ProcessorResultEvt)=%d\n", (int)sizeof(ProcessorResultEvt));
     rt_kprintf("[QActiveDemo_init] sizeof(WorkerWorkEvt)=%d\n", (int)sizeof(WorkerWorkEvt));
 
-    /* Initialize event pools. All 8-byte events use shared8Pool. */
+    /* Initialize event pools. Events organized by size. */
     QF_poolInit(basicEventPool, sizeof(basicEventPool), sizeof(QEvt));
     rt_kprintf("[QActiveDemo_init] Basic event pool initialized\n");
     QF_poolInit(shared8Pool, sizeof(shared8Pool), sizeof(SensorDataEvt));
-    rt_kprintf("[QActiveDemo_init] Shared 8-byte event pool initialized for SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt\n");
+    rt_kprintf("[QActiveDemo_init] Shared 8-byte event pool initialized for SensorDataEvt, ProcessorResultEvt\n");
+    QF_poolInit(worker16Pool, sizeof(worker16Pool), sizeof(WorkerWorkEvt));
+    rt_kprintf("[QActiveDemo_init] Worker 16-byte event pool initialized for WorkerWorkEvt\n");
 
     /* Initialize RT-Thread integration */
     if (rt_integration_init() == 0) {
