@@ -576,7 +576,7 @@ void QActiveDemo_init(void) {
     QF_poolInit(basicEventPool, sizeof(basicEventPool), sizeof(QEvt));
     rt_kprintf("[QActiveDemo_init] Basic event pool initialized\n");
     QF_poolInit(shared8Pool, sizeof(shared8Pool), sizeof(SensorDataEvt));
-    rt_kprintf("[QativeDemo_init] Shared 8-byte event pool initialized for SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt\n");
+    rt_kprintf("[QActiveDemo_init] Shared 8-byte event pool initialized for SensorDataEvt, ProcessorResultEvt, WorkerWorkEvt\n");
 
     /* Initialize RT-Thread integration */
     if (rt_integration_init() == 0) {
