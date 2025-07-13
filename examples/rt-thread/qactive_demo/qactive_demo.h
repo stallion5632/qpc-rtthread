@@ -96,10 +96,4 @@ extern QActive * const AO_Monitor;
 void QActiveDemo_init(void);
 int qactive_demo_start(void);
 
-/* Constructor functions for individual AOs */
-void SensorAO_ctor(void);
-void ProcessorAO_ctor(void);
-void WorkerAO_ctor(void);
-void MonitorAO_ctor(void);
-
 #endif /* QACTIVE_DEMO_H_ */
