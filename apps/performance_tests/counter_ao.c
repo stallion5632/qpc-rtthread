@@ -28,6 +28,7 @@
 ============================================================================*/
 #include "counter_ao.h"
 #include "logger_ao.h"
+#include "app_main.h"
 #include "bsp.h"
 
 Q_DEFINE_THIS_MODULE("counter_ao")
@@ -101,6 +102,7 @@ static QState CounterAO_initial(CounterAO * const me, QEvt const * const e) {
     QActive_subscribe((QActive *)me, APP_STOP_SIG);
     QActive_subscribe((QActive *)me, COUNTER_START_SIG);
     QActive_subscribe((QActive *)me, COUNTER_STOP_SIG);
+    QActive_subscribe((QActive *)me, TIMER_TICK_SIG); /* Subscribe to timer ticks for counting */
 
     return Q_TRAN(&CounterAO_stopped);
 }
@@ -192,6 +194,31 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
                 counterEvt->counter_value = me->counter_value;
                 counterEvt->timestamp = BSP_getTimestampMs();
                 QF_PUBLISH((QEvt *)counterEvt, (void *)0);
+            }
+
+            status = Q_HANDLED();
+            break;
+        }
+        case TIMER_TICK_SIG: {
+            /* Handle timer tick events from TimerAO */
+            TimerTickEvt const *tickEvt = (TimerTickEvt const *)e;
+            
+            /* Increment counter on each timer tick */
+            ++me->counter_value;
+            ++me->update_count;
+
+            /* Update global statistics */
+            rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
+            ++g_perf_stats.counter_updates;
+            rt_mutex_release(g_stats_mutex);
+
+            /* Toggle LED to show activity */
+            BSP_ledToggle();
+
+            /* Log periodic updates (every 50th tick to reduce log volume) */
+            if ((tickEvt->tick_count % 50U) == 0U) {
+                LoggerAO_logInfo("CounterAO: Timer tick #%u, counter = %u",
+                               tickEvt->tick_count, me->counter_value);
             }
 
             status = Q_HANDLED();
