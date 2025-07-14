@@ -93,7 +93,8 @@ static QState CounterAO_initial(CounterAO * const me, QEvt const * const e) {
     me->update_count = 0U;
     me->is_running = RT_FALSE;
 
-    LoggerAO_logDebug("CounterAO: Initial state entered");
+    /* Reduce logging during startup to prevent event queue overflow */
+    /* LoggerAO_logDebug("CounterAO: Initial state entered"); */
 
     /* Subscribe to relevant signals */
     QActive_subscribe((QActive *)me, APP_START_SIG);
@@ -115,7 +116,8 @@ static QState CounterAO_stopped(CounterAO * const me, QEvt const * const e) {
             break;
         }
         case Q_EXIT_SIG: {
-            LoggerAO_logDebug("CounterAO: Exiting stopped state");
+            /* Reduce startup logging to prevent queue overflow */
+            /* LoggerAO_logDebug("CounterAO: Exiting stopped state"); */
             status = Q_HANDLED();
             break;
         }

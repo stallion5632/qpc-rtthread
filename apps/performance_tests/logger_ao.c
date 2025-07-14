@@ -206,10 +206,13 @@ static QState LoggerAO_initial(LoggerAO * const me, QEvt const * const e) {
     QActive_subscribe((QActive *)me, APP_START_SIG);
     QActive_subscribe((QActive *)me, APP_STOP_SIG);
     QActive_subscribe((QActive *)me, TIMER_REPORT_SIG);
-    QActive_subscribe((QActive *)me, COUNTER_UPDATE_SIG);
+    /* Note: Do NOT subscribe to high-frequency signals like TIMER_TICK_SIG
+     * or COUNTER_UPDATE_SIG to avoid event queue overflow */
 
-    /* Directly output initial message to console (before logging is active) */
-    rt_kprintf("[%s] LoggerAO: Initial state entered\n", l_logLevelStr[LOG_LEVEL_DEBUG]);
+    /* Direct console output for initial message (bypassing event queue) */
+    rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
+    rt_kprintf("[DEBUG] LoggerAO: Initial state entered\n");
+    rt_mutex_release(g_log_mutex);
 
     return Q_TRAN(&LoggerAO_idle);
 }
@@ -221,19 +224,25 @@ static QState LoggerAO_idle(LoggerAO * const me, QEvt const * const e) {
         case Q_ENTRY_SIG: {
             me->is_active = RT_FALSE;
             /* Direct console output for state entry */
-            rt_kprintf("[%s] LoggerAO: Idle state entered\n", l_logLevelStr[LOG_LEVEL_INFO]);
+            rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
+            rt_kprintf("[INFO ] LoggerAO: Idle state entered\n");
+            rt_mutex_release(g_log_mutex);
             status = Q_HANDLED();
             break;
         }
         case Q_EXIT_SIG: {
             /* Direct console output for state exit */
-            rt_kprintf("[%s] LoggerAO: Exiting idle state\n", l_logLevelStr[LOG_LEVEL_DEBUG]);
+            rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
+            rt_kprintf("[DEBUG] LoggerAO: Exiting idle state\n");
+            rt_mutex_release(g_log_mutex);
             status = Q_HANDLED();
             break;
         }
         case APP_START_SIG: {
             /* Direct console output for transition */
-            rt_kprintf("[%s] LoggerAO: Starting logging service\n", l_logLevelStr[LOG_LEVEL_INFO]);
+            rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
+            rt_kprintf("[INFO ] LoggerAO: Starting logging service\n");
+            rt_mutex_release(g_log_mutex);
             status = Q_TRAN(&LoggerAO_active);
             break;
         }
@@ -285,8 +294,7 @@ static QState LoggerAO_active(LoggerAO * const me, QEvt const * const e) {
 
             /* Thread-safe console output */
             rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
-            rt_kprintf("[%s] LoggerAO: Active state entered, flush timer started\n",
-                      l_logLevelStr[LOG_LEVEL_INFO]);
+            rt_kprintf("[INFO ] LoggerAO: Active state entered, flush timer started\n");
             rt_mutex_release(g_log_mutex);
 
             status = Q_HANDLED();
@@ -299,8 +307,7 @@ static QState LoggerAO_active(LoggerAO * const me, QEvt const * const e) {
 
             /* Thread-safe console output */
             rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
-            rt_kprintf("[%s] LoggerAO: Exiting active state, flush timer stopped\n",
-                      l_logLevelStr[LOG_LEVEL_INFO]);
+            rt_kprintf("[INFO ] LoggerAO: Exiting active state, flush timer stopped\n");
             rt_mutex_release(g_log_mutex);
 
             status = Q_HANDLED();

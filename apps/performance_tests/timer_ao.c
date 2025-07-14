@@ -115,7 +115,8 @@ static QState TimerAO_initial(TimerAO * const me, QEvt const * const e) {
     me->current_state = TIMER_STATE_STOPPED;
     me->is_running = RT_FALSE;
 
-    LoggerAO_logDebug("TimerAO: Initial state entered");
+    /* Reduce logging during startup to prevent event queue overflow */
+    /* LoggerAO_logDebug("TimerAO: Initial state entered"); */
 
     /* Subscribe to relevant signals */
     QActive_subscribe((QActive *)me, APP_START_SIG);
@@ -139,7 +140,8 @@ static QState TimerAO_stopped(TimerAO * const me, QEvt const * const e) {
             break;
         }
         case Q_EXIT_SIG: {
-            LoggerAO_logDebug("TimerAO: Exiting stopped state");
+            /* Reduce startup logging to prevent queue overflow */
+            /* LoggerAO_logDebug("TimerAO: Exiting stopped state"); */
             status = Q_HANDLED();
             break;
         }

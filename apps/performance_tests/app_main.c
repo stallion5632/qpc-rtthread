@@ -53,7 +53,7 @@ static QSubscrList l_subscrSto[MAX_PUB_SIG];
 #define TIMER_QUEUE_SIZE 128U /* Event queue size for Timer AO */
 #endif
 #ifndef LOGGER_QUEUE_SIZE
-#define LOGGER_QUEUE_SIZE 128U /* Event queue size for Logger AO */
+#define LOGGER_QUEUE_SIZE 256U /* Event queue size for Logger AO - increased for burst handling */
 #endif
 
 #ifndef COUNTER_STACK_SIZE
@@ -172,6 +172,11 @@ int PerformanceApp_start(void) {
 
     /* Start Active Objects only once */
     if (!l_aos_started) {
+        /* Set thread names before starting Active Objects */
+        QActive_setAttr(AO_Counter, THREAD_NAME_ATTR, "counter_ao");
+        QActive_setAttr(AO_Timer, THREAD_NAME_ATTR, "timer_ao");
+        QActive_setAttr(AO_Logger, THREAD_NAME_ATTR, "logger_ao");
+
         /* Start Active Objects with their priorities and event queues */
         QACTIVE_START(AO_Counter,
                       (uint_fast8_t)COUNTER_AO_PRIO,
@@ -205,11 +210,15 @@ int PerformanceApp_start(void) {
     g_perf_stats.test_running = RT_TRUE;
     rt_mutex_release(g_stats_mutex);
 
-    /* Post start signals to Active Objects */
+    /* Post start signals to Active Objects with small delays to reduce event burst */
     static QEvt const startEvt = { APP_START_SIG, 0U, 0U };
-    QACTIVE_POST(AO_Counter, &startEvt, (void *)0);
-    QACTIVE_POST(AO_Timer, &startEvt, (void *)0);
     QACTIVE_POST(AO_Logger, &startEvt, (void *)0);
+    rt_thread_mdelay(10); /* Small delay */
+    
+    QACTIVE_POST(AO_Timer, &startEvt, (void *)0);
+    rt_thread_mdelay(10); /* Small delay */
+    
+    QACTIVE_POST(AO_Counter, &startEvt, (void *)0);
 
     /* Log the test start */
     LoggerAO_logInfo("Performance test started");

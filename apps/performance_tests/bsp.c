@@ -274,3 +274,37 @@ uint32_t BSP_getIdleCount(void) {
     static uint32_t simulated_idle = 0U;
     return ++simulated_idle; /* Simple simulation */
 }
+
+/*==========================================================================*/
+/* Thread-safe Logging Support */
+/*==========================================================================*/
+
+/* Declare external mutex from app_main.c */
+extern rt_mutex_t g_log_mutex;
+
+void BSP_logLock(void) {
+    if (g_log_mutex != RT_NULL) {
+        rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
+    }
+}
+
+void BSP_logUnlock(void) {
+    if (g_log_mutex != RT_NULL) {
+        rt_mutex_release(g_log_mutex);
+    }
+}
+
+/*==========================================================================*/
+/* QPC Framework Integration */
+/*==========================================================================*/
+
+/* QF_onStartup implementation - basic version */
+bool QF_onStartup(void) {
+    /* Initialize QF framework if needed */
+    return true; /* Return true if startup successful */
+}
+
+/* QF_onCleanup implementation */
+void QF_onCleanup(void) {
+    /* Cleanup QF framework if needed */
+}
