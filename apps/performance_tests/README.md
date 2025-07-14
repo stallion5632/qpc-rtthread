@@ -1,6 +1,213 @@
 # QPC-RT-Thread Performance Test Suite
 
-This directory contains a comprehensive performance test suite for the QPC (Quantum Platform for C) framework running on RT-Thread RTOS. The test suite addresses critical performance measurement concerns and implements best practices for thread safety, memory management, and measurement accuracy.
+This directory contains a comprehensive performance test suite for the QPC (Quantum Platform for C) framework running on RT-Thread RTOS. The test suite is built using QPC Active Objects with proper signal handling, mutex protection, and MISRA C compliance.
+
+## Architecture Overview
+
+The performance test suite follows the QPC Active Object pattern with three main Active Objects:
+
+### Active Objects
+
+1. **CounterAO** (`counter_ao.c`, `counter_ao.h`)
+   - Periodically updates a counter value every 100ms
+   - Publishes counter update events
+   - Tracks performance statistics
+   - Implements proper state transitions with Q_ENTRY_SIG and Q_EXIT_SIG handling
+
+2. **TimerAO** (`timer_ao.c`, `timer_ao.h`)
+   - Generates timer ticks every 100ms
+   - Implements a dedicated reporting state with proper transitions
+   - Reports system performance every 1 second
+   - Tracks elapsed time and generates periodic reports
+
+3. **LoggerAO** (`logger_ao.c`, `logger_ao.h`)
+   - Provides thread-safe logging using RT-Thread mutexes
+   - Supports multiple log levels (DEBUG, INFO, WARN, ERROR)
+   - Processes log events asynchronously
+   - Maintains log statistics with counters
+
+### Application Framework
+
+4. **App Main** (`app_main.c`, `app_main.h`)
+   - Ensures QF framework is initialized exactly once
+   - Guarantees Active Objects are started only once with clear state checks
+   - Provides RT-Thread MSH commands for test control
+   - Manages shared statistics with mutex protection
+
+5. **Board Support Package** (`bsp.c`, `bsp.h`)
+   - Hardware abstraction layer
+   - Performance monitoring using DWT cycle counter
+   - LED control simulation
+   - System information and memory management
+
+## Key Features Implemented
+
+### 1. Proper QP/C Framework Signal Handling
+- **Q_ENTRY_SIG, Q_EXIT_SIG, Q_INIT_SIG**: Properly handled in all state machines
+- **User Signals**: Well-defined signal ranges to prevent conflicts
+- **Signal Subscription**: Active Objects subscribe only to relevant signals
+- **Event Publishing**: Proper event publishing and consumption patterns
+
+### 2. Framework Initialization Guarantees
+- **QF Single Initialization**: `PerformanceApp_isQFInitialized()` ensures QF is initialized exactly once
+- **AO Single Start**: `PerformanceApp_areAOsStarted()` ensures Active Objects are started only once
+- **State Tracking**: Clear state checks prevent multiple initializations
+- **Resource Management**: Proper cleanup and state management
+
+### 3. TimerAO Reporting State Implementation
+- **Dedicated Reporting State**: `TimerAO_reporting` state for report generation
+- **Proper State Transitions**: Clean transitions between running and reporting states
+- **Report Generation**: Structured timer reports with statistics
+- **Transition Safety**: Proper handling of stop signals during reporting
+
+### 4. Mutex-Protected Logging
+- **RT-Thread Mutexes**: `g_log_mutex` for thread-safe console output
+- **Statistics Protection**: `g_stats_mutex` for shared data access
+- **Atomic Operations**: Safe counter updates and flag access
+- **Deadlock Prevention**: Consistent mutex ordering and timeout handling
+
+### 5. MISRA C Compliance
+- **Explicit Casting**: All type conversions are explicit
+- **No Magic Numbers**: All constants are properly defined
+- **Consistent Naming**: CamelCase for functions, snake_case for variables
+- **Bracket Style**: Consistent K&R bracket style
+- **Parameter Validation**: Null pointer checks and parameter validation
+- **Defensive Programming**: Default cases in switch statements
+
+## Signal Definitions
+
+```c
+enum PerformanceAppSignals {
+    /* Counter AO signals */
+    COUNTER_START_SIG = Q_USER_SIG,
+    COUNTER_STOP_SIG,
+    COUNTER_UPDATE_SIG,
+    COUNTER_TIMEOUT_SIG,
+    
+    /* Timer AO signals */
+    TIMER_START_SIG,
+    TIMER_STOP_SIG,
+    TIMER_TICK_SIG,
+    TIMER_REPORT_SIG,
+    TIMER_TIMEOUT_SIG,
+    
+    /* Logger AO signals */
+    LOGGER_LOG_SIG,
+    LOGGER_FLUSH_SIG,
+    LOGGER_TIMEOUT_SIG,
+    
+    /* Application control signals */
+    APP_START_SIG,
+    APP_STOP_SIG,
+    APP_RESET_SIG
+};
+```
+
+## Usage
+
+### RT-Thread MSH Commands
+
+```bash
+# Start the performance test
+perf_test_start_cmd
+
+# Stop the performance test
+perf_test_stop_cmd
+
+# Show performance statistics
+perf_test_stats_cmd
+
+# Reset performance statistics
+perf_test_reset_cmd
+```
+
+### Programmatic Interface
+
+```c
+#include "app_main.h"
+
+// Initialize the application
+PerformanceApp_init();
+
+// Start the performance test
+int result = PerformanceApp_start();
+
+// Get statistics
+PerformanceStats stats;
+PerformanceApp_getStats(&stats);
+
+// Stop the test
+PerformanceApp_stop();
+```
+
+### Thread-Safe Logging
+
+```c
+#include "logger_ao.h"
+
+// Thread-safe logging from any context
+LoggerAO_logInfo("Counter value: %u", counter_value);
+LoggerAO_logWarn("Performance warning detected");
+LoggerAO_logError("Critical error occurred");
+```
+
+## Performance Metrics
+
+The test suite tracks the following metrics:
+
+- **Counter Updates**: Number of counter increments
+- **Timer Ticks**: Number of timer tick events
+- **Timer Reports**: Number of performance reports generated
+- **Log Messages**: Total number of log messages processed
+- **Test Duration**: Elapsed time in milliseconds
+- **Test Status**: Current running state
+
+## Build Configuration
+
+The performance test suite requires the following RT-Thread configuration:
+
+```c
+#define PKG_USING_QPC                1
+#define RT_USING_MAILBOX            1
+#define RT_USING_FINSH              1
+#define RT_USING_MUTEX              1
+```
+
+## Safety Features
+
+### Memory Safety
+- **Event Pool Management**: Proper event allocation and deallocation
+- **Null Pointer Checks**: Defensive programming against null pointers
+- **Buffer Overflow Protection**: Safe string operations with bounds checking
+
+### Thread Safety
+- **Mutex Protection**: All shared data protected by mutexes
+- **Atomic Operations**: Safe access to simple data types
+- **Event-Driven Communication**: No direct shared memory between AOs
+
+### Resource Management
+- **Single Initialization**: Framework initialized exactly once
+- **Proper Cleanup**: Clean shutdown and resource deallocation
+- **State Management**: Clear state tracking and transitions
+
+## Testing and Validation
+
+The test suite provides comprehensive validation:
+
+1. **State Machine Testing**: All states and transitions are tested
+2. **Signal Handling**: Proper signal processing validation
+3. **Mutex Protection**: Thread safety verification
+4. **Resource Management**: Memory leak detection
+5. **Performance Monitoring**: Real-time performance metrics
+
+## Compatibility
+
+- **QPC Framework**: 7.2.0+
+- **RT-Thread**: 4.0+ with mutex and mailbox support
+- **ARM Cortex-M**: With DWT support for performance monitoring
+- **Build Systems**: SCons (RT-Thread standard)
+
+This performance test suite demonstrates best practices for QPC Active Object design with RT-Thread integration, emphasizing safety, reliability, and maintainability.
 
 ## Features Implemented
 
