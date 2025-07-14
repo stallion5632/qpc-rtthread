@@ -309,6 +309,14 @@ int perf_test_stats_cmd(int argc, char** argv) {
     rt_kprintf("QF initialized: %s\n", PerformanceApp_isQFInitialized() ? "Yes" : "No");
     rt_kprintf("AOs started: %s\n", PerformanceApp_areAOsStarted() ? "Yes" : "No");
 
+    // Check if statistics are consistent with actual events and warn the user
+    if (stats.timer_reports > 0 && (stats.timer_reports != (stats.timer_ticks / 10))) {
+        rt_kprintf("[WARN ] Timer reports count (%u) does not match Timer ticks/10 (%u), possible timing deviation.\n", stats.timer_reports, stats.timer_ticks / 10);
+    }
+    if (stats.counter_updates != (stats.timer_ticks * 2)) {
+        rt_kprintf("[WARN ] Counter updates (%u) does not match Timer ticks*2 (%u), please check counter logic.\n", stats.counter_updates, stats.timer_ticks * 2);
+    }
+
     return 0;
 }
 MSH_CMD_EXPORT(perf_test_stats_cmd, Show performance test statistics);

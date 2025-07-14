@@ -170,40 +170,21 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
             break;
         }
         case COUNTER_UPDATE_SIG: {
-            /* Increment counter value */
-            ++me->counter_value;
-            ++me->update_count;
-
-            /* Update global statistics */
-            rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
-            ++g_perf_stats.counter_updates;
-            rt_mutex_release(g_stats_mutex);
-
-            /* Toggle LED to show activity */
-            BSP_ledToggle();
-
-            /* Log periodic updates (every 10th update) */
-            if ((me->update_count % 10U) == 0U) {
-                SYS_LOG_I("CounterAO: Counter value = %u, updates = %u",
-                               me->counter_value, me->update_count);
-            }
-
-            /* Publish counter update event */
+            /* Only publish event, do not increment counter, to ensure 1:1 relation */
             CounterUpdateEvt *counterEvt = Q_NEW(CounterUpdateEvt, COUNTER_UPDATE_SIG);
             if (counterEvt != (CounterUpdateEvt *)0) {
                 counterEvt->counter_value = me->counter_value;
                 counterEvt->timestamp = BSP_getTimestampMs();
                 QF_PUBLISH((QEvt *)counterEvt, (void *)0);
             }
-
             status = Q_HANDLED();
             break;
         }
         case TIMER_TICK_SIG: {
             /* Handle timer tick events from TimerAO */
             TimerTickEvt const *tickEvt = (TimerTickEvt const *)e;
-            
-            /* Increment counter on each timer tick */
+
+            /* Only increment counter on TIMER_TICK_SIG, to ensure 1:1 relation */
             ++me->counter_value;
             ++me->update_count;
 
@@ -215,8 +196,8 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
             /* Toggle LED to show activity */
             BSP_ledToggle();
 
-            /* Log periodic updates (every 50th tick to reduce log volume) */
-            if ((tickEvt->tick_count % 50U) == 0U) {
+            /* Log periodic updates (print every 10 ticks) */
+            if ((tickEvt->tick_count % 10U) == 0U) {
                 SYS_LOG_I("CounterAO: Timer tick #%u, counter = %u",
                                tickEvt->tick_count, me->counter_value);
             }
