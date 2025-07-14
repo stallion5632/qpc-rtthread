@@ -38,7 +38,6 @@
 #define PERF_TEST_TIMEOUT_MS        (10000U)  /* 10 second test duration */
 #define COUNTER_UPDATE_INTERVAL_MS  (100U)    /* Counter update every 100ms */
 #define TIMER_REPORT_INTERVAL_MS    (1000U)   /* Timer report every 1 second */
-#define LOG_BUFFER_SIZE             (128U)    /* Log message buffer size */
 
 /*==========================================================================*/
 /* Performance Test Signals */
@@ -90,14 +89,6 @@ typedef struct {
     uint32_t tick_count;  /* Number of timer ticks */
     uint32_t counter_value; /* Value of the counter at report */
 } TimerReportEvt;
-
-/* Structure for log event */
-typedef struct {
-    QEvt super;                 /* Base event structure */
-    char message[LOG_BUFFER_SIZE]; /* Log message buffer */
-    uint32_t timestamp;         /* Timestamp of the log event (ms) */
-    uint8_t log_level;          /* Log level indicator */
-} LogEvt;
 
 /* Enumeration for performance test AO priorities */
 enum PerformanceAppPriorities {

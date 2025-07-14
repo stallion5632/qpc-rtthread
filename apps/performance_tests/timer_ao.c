@@ -29,7 +29,7 @@
 #include "timer_ao.h"
 #include "counter_ao.h"
 #include "bsp.h"
-#include "inc/sys_log.h"
+#include "sys_log.h"
 
 Q_DEFINE_THIS_MODULE("timer_ao")
 
