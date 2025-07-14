@@ -57,6 +57,19 @@ static rt_bool_t l_perf_initialized = RT_FALSE;
 /* Critical section nesting counter */
 static volatile uint32_t l_critical_nesting = 0U;
 
+/* QF Ticker support for RT-Thread */
+static rt_timer_t l_qf_ticker = RT_NULL;
+
+/*==========================================================================*/
+/* QF Ticker Implementation */
+/*==========================================================================*/
+static void qf_tick_handler(void *parameter) {
+    (void)parameter; /* Suppress unused parameter warning */
+    
+    /* Call QF tick processing - this drives all QTimeEvt objects */
+    QTimeEvt_tick_(0U, (void *)0); /* ticker rate 0, no spy */
+}
+
 /*==========================================================================*/
 /* System Initialization */
 /*==========================================================================*/
@@ -67,6 +80,22 @@ void BSP_init(void) {
 
     /* Initialize LED (simulated) */
     BSP_ledInit();
+
+    /* Initialize QF ticker */
+    if (l_qf_ticker == RT_NULL) {
+        /* Create RT-Thread timer for QF tick processing */
+        l_qf_ticker = rt_timer_create("qf_tick",
+                                      qf_tick_handler,
+                                      RT_NULL,
+                                      1,  /* 1 tick period (matches RT_TICK_PER_SECOND) */
+                                      RT_TIMER_FLAG_PERIODIC);
+        if (l_qf_ticker != RT_NULL) {
+            rt_timer_start(l_qf_ticker);
+            rt_kprintf("BSP: QF ticker started\n");
+        } else {
+            rt_kprintf("BSP: Failed to create QF ticker\n");
+        }
+    }
 
     /* Note: RT-Thread system initialization is handled by the framework */
     rt_kprintf("BSP: Board Support Package initialized\n");

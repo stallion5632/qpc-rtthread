@@ -35,7 +35,7 @@
 /*==========================================================================*/
 /* BSP Configuration */
 /*==========================================================================*/
-#define BSP_TICKS_PER_SEC       (1000U)   /* RT-Thread tick frequency */
+#define BSP_TICKS_PER_SEC       RT_TICK_PER_SECOND   /* Use RT-Thread's actual tick frequency */
 
 /*==========================================================================*/
 /* Hardware Abstraction */

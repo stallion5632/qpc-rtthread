@@ -92,8 +92,8 @@ typedef struct {
 
 /* Enumeration for performance test AO priorities */
 enum PerformanceAppPriorities {
-    COUNTER_AO_PRIO = 1U, /* Priority for Counter AO */
-    TIMER_AO_PRIO   = 2U  /* Priority for Timer AO */
+    TIMER_AO_PRIO   = 30U, /* Priority for Timer AO - higher priority */
+    COUNTER_AO_PRIO = 31U  /* Priority for Counter AO - lower priority */
 };
 
 /* Pointers to active object instances */

@@ -177,15 +177,22 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
             me->start_time_ms = BSP_getTimestampMs();
             me->last_report_time = me->start_time_ms;
 
+            /* Calculate timer intervals */
+            uint32_t tick_ticks = BSP_TICKS_PER_SEC / 10U;  /* 100ms */
+            uint32_t report_ticks = BSP_TICKS_PER_SEC * TIMER_REPORT_INTERVAL_MS / 1000U;
+
+            SYS_LOG_D("TimerAO: Starting timers - tick_ticks=%u, report_ticks=%u, BSP_TICKS_PER_SEC=%u", 
+                      tick_ticks, report_ticks, BSP_TICKS_PER_SEC);
+
             /* Start the tick timer (100ms intervals) */
             QTimeEvt_armX(&me->tickTimeEvt,
-                         BSP_TICKS_PER_SEC / 10U,  /* 100ms */
-                         BSP_TICKS_PER_SEC / 10U); /* Periodic */
+                         tick_ticks,      /* 100ms */
+                         tick_ticks);     /* Periodic */
 
             /* Start the report timer (1 second intervals) */
             QTimeEvt_armX(&me->reportTimeEvt,
-                         BSP_TICKS_PER_SEC * TIMER_REPORT_INTERVAL_MS / 1000U,
-                         BSP_TICKS_PER_SEC * TIMER_REPORT_INTERVAL_MS / 1000U);
+                         report_ticks,
+                         report_ticks);
 
             SYS_LOG_I("TimerAO: Running state entered, timers started");
             status = Q_HANDLED();
@@ -203,6 +210,11 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
         case TIMER_TICK_SIG: {
             /* Increment tick count */
             ++me->tick_count;
+
+            /* Debug: Log timer tick to verify it's firing */
+            if ((me->tick_count % 10U) == 0U) {
+                SYS_LOG_D("TimerAO: Timer tick #%u fired", me->tick_count);
+            }
 
             /* Update global statistics */
             rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
