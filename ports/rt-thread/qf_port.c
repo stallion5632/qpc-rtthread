@@ -148,12 +148,7 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
         }
         else {
             status = false; /* cannot post */
-            rt_kprintf("[QPC][ERROR] AO event queue full, event drop! AO=%p, sig=%u\n", me, e->sig);
-            #if (QF_MAX_EPOOL > 0U)
-            QF_gc(e);
-            #endif
-            QF_CRIT_X_();
-            return false;
+            Q_ERROR_ID(510); /* must be able to post the event */
         }
     }
     else if (nFree > (QEQueueCtr)margin) {

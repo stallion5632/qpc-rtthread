@@ -303,12 +303,57 @@ bool QF_postFromISR(QActive * const me, QEvt const * const e) {
             QEvt_refCtr_inc_(e);
         }
         
-        /* Signal the dispatcher thread */
+        /* Notify kernel: entering ISR */
+        rt_interrupt_enter();
+        
+        /* Signal the dispatcher thread (PendSV defers switching) */
         rt_sem_release(&l_dispatcher.sem);
+        
+        /* Notify kernel: leaving ISR */
+        rt_interrupt_leave();
+        
         return true;
     }
     
     return false;
+}
+
+/*..........................................................................*/
+void QF_publishFromISR(QEvt const * const e, void const * const sender) {
+    Q_UNUSED_PAR(sender);
+    
+    if (!l_dispatcher.enabled) {
+        return;
+    }
+    
+    /* Determine priority level using strategy */
+    QF_PrioLevel prioLevel = l_policy->getPrioLevel(e);
+    
+    /* Process all active objects that might be interested in this event */
+    for (uint8_t p = 1U; p <= QF_MAX_ACTIVE; ++p) {
+        QActive * const a = QActive_registry_[p];
+        if (a != (QActive *)0) {
+            /* Check if this AO subscribes to this signal (simplified) */
+            /* In a full implementation, you'd check the subscription table */
+            
+            /* Add to appropriate staging buffer for each subscribed AO */
+            if (QF_addToStagingBuffer(prioLevel, e, a)) {
+                /* Increment reference counter for dynamic events */
+                if (e->poolId_ != 0U) {
+                    QEvt_refCtr_inc_(e);
+                }
+            }
+        }
+    }
+    
+    /* Notify kernel: entering ISR */
+    rt_interrupt_enter();
+    
+    /* Release semaphore to signal dispatcher thread (PendSV defers switching) */
+    rt_sem_release(&l_dispatcher.sem);
+    
+    /* Notify kernel: leaving ISR */
+    rt_interrupt_leave();
 }
 
 /*..........................................................................*/
@@ -373,8 +418,8 @@ QEvtEx *QF_newEvtEx(enum_t const sig, uint16_t const evtSize, uint8_t priority, 
         evtEx->timestamp = QF_getTimestamp();
         evtEx->priority = priority;
         evtEx->flags = flags;
-        evtEx->retryCount = 0U;
-        evtEx->reserved = 0U;
+        evtEx->retryCount = 0U;     /* Clear residual retry count */
+        evtEx->reserved = 0U;       /* Clear reserved field */
     }
     
     return evtEx;

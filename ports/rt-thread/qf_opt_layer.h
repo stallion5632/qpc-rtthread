@@ -93,6 +93,7 @@ void QF_initOptLayer(void);
 void QF_setDispatcherStrategy(QF_DispatcherStrategy const *strategy);
 QF_DispatcherStrategy const *QF_getDispatcherPolicy(void);
 bool QF_postFromISR(QActive * const me, QEvt const * const e);
+void QF_publishFromISR(QEvt const * const e, void const * const sender);
 uint32_t QF_getLostEventCount(void);
 void QF_enableOptLayer(void);
 void QF_disableOptLayer(void);
