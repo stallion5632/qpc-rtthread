@@ -73,6 +73,7 @@ typedef struct {
     QEvt super;           /* Base event structure */
     uint32_t counter_value; /* Value of the counter */
     uint32_t timestamp;     /* Timestamp of the event (ms) */
+    uint32_t margin;
 } CounterUpdateEvt;
 
 /* Structure for timer tick event */
@@ -80,6 +81,7 @@ typedef struct {
     QEvt super;           /* Base event structure */
     uint32_t tick_count;  /* Number of timer ticks */
     uint32_t timestamp;   /* Timestamp of the event (ms) */
+    uint32_t margin;
 } TimerTickEvt;
 
 /* Structure for timer report event */

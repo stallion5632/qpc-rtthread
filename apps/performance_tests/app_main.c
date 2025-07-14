@@ -70,11 +70,9 @@ static uint8_t timer_stack[TIMER_STACK_SIZE];     /* Thread stack for Timer AO *
 /* Event pool size definitions */
 #define SMALL_EVENT_SIZE    sizeof(QEvt)             /* Size of small event pool element */
 #define MEDIUM_EVENT_SIZE   sizeof(CounterUpdateEvt) /* Size of medium event pool element */
-#define LARGE_EVENT_SIZE    sizeof(TimerTickEvt)     /* Size of large event pool element */
 
-static QF_MPOOL_EL(QEvt) l_smlPoolSto[20U];              /* Small event pool storage */
-static QF_MPOOL_EL(CounterUpdateEvt) l_medPoolSto[10U];  /* Medium event pool storage */
-static QF_MPOOL_EL(TimerTickEvt) l_lrgPoolSto[10U];      /* Large event pool storage */
+static QF_MPOOL_EL(QEvt) l_smlPoolSto[100U];              /* Small event pool storage */
+static QF_MPOOL_EL(CounterUpdateEvt) l_medPoolSto[50U];  /* Medium event pool storage */
 
 /* Application state tracking flags */
 static rt_bool_t l_qf_initialized = RT_FALSE; /* QF framework initialization flag */
@@ -133,7 +131,6 @@ void PerformanceApp_init(void) {
         /* Initialize event pools */
         QF_poolInit(l_smlPoolSto, sizeof(l_smlPoolSto), SMALL_EVENT_SIZE);
         QF_poolInit(l_medPoolSto, sizeof(l_medPoolSto), MEDIUM_EVENT_SIZE);
-        QF_poolInit(l_lrgPoolSto, sizeof(l_lrgPoolSto), LARGE_EVENT_SIZE);
 
         l_qf_initialized = RT_TRUE;
     }
@@ -190,10 +187,10 @@ int PerformanceApp_start(void) {
 
     /* Post start signals to Active Objects with small delays to reduce event burst */
     static QEvt const startEvt = { APP_START_SIG, 0U, 0U };
-    
+
     QACTIVE_POST(AO_Timer, &startEvt, (void *)0);
     rt_thread_mdelay(10); /* Small delay */
-    
+
     QACTIVE_POST(AO_Counter, &startEvt, (void *)0);
 
     /* Log the test start using direct logging */
