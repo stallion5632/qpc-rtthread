@@ -49,24 +49,24 @@ enum PerformanceAppSignals {
     COUNTER_STOP_SIG,
     COUNTER_UPDATE_SIG,
     COUNTER_TIMEOUT_SIG,
-    
+
     /* Timer AO signals */
     TIMER_START_SIG,
     TIMER_STOP_SIG,
     TIMER_TICK_SIG,
     TIMER_REPORT_SIG,
     TIMER_TIMEOUT_SIG,
-    
+
     /* Logger AO signals */
     LOGGER_LOG_SIG,
     LOGGER_FLUSH_SIG,
     LOGGER_TIMEOUT_SIG,
-    
+
     /* Application control signals */
     APP_START_SIG,
     APP_STOP_SIG,
     APP_RESET_SIG,
-    
+
     MAX_PERF_APP_SIG
 };
 
@@ -74,112 +74,104 @@ enum PerformanceAppSignals {
 /* Performance Test Events */
 /*==========================================================================*/
 
-/* Counter update event */
+/* Structure for counter update event */
 typedef struct {
-    QEvt super;
-    uint32_t counter_value;
-    uint32_t timestamp;
+    QEvt super;           /* Base event structure */
+    uint32_t counter_value; /* Value of the counter */
+    uint32_t timestamp;     /* Timestamp of the event (ms) */
 } CounterUpdateEvt;
 
-/* Timer tick event */
+/* Structure for timer tick event */
 typedef struct {
-    QEvt super;
-    uint32_t tick_count;
-    uint32_t timestamp;
+    QEvt super;           /* Base event structure */
+    uint32_t tick_count;  /* Number of timer ticks */
+    uint32_t timestamp;   /* Timestamp of the event (ms) */
 } TimerTickEvt;
 
-/* Timer report event */
+/* Structure for timer report event */
 typedef struct {
-    QEvt super;
-    uint32_t elapsed_ms;
-    uint32_t tick_count;
-    uint32_t counter_value;
+    QEvt super;           /* Base event structure */
+    uint32_t elapsed_ms;  /* Elapsed time in milliseconds */
+    uint32_t tick_count;  /* Number of timer ticks */
+    uint32_t counter_value; /* Value of the counter at report */
 } TimerReportEvt;
 
-/* Log event */
+/* Structure for log event */
 typedef struct {
-    QEvt super;
-    char message[LOG_BUFFER_SIZE];
-    uint32_t timestamp;
-    uint8_t log_level;
+    QEvt super;                 /* Base event structure */
+    char message[LOG_BUFFER_SIZE]; /* Log message buffer */
+    uint32_t timestamp;         /* Timestamp of the log event (ms) */
+    uint8_t log_level;          /* Log level indicator */
 } LogEvt;
 
-/*==========================================================================*/
-/* Performance Test Priorities */
-/*==========================================================================*/
+/* Enumeration for performance test AO priorities */
 enum PerformanceAppPriorities {
-    COUNTER_AO_PRIO = 1U,
-    TIMER_AO_PRIO   = 2U,
-    LOGGER_AO_PRIO  = 3U
+    COUNTER_AO_PRIO = 1U, /* Priority for Counter AO */
+    TIMER_AO_PRIO   = 2U, /* Priority for Timer AO */
+    LOGGER_AO_PRIO  = 3U  /* Priority for Logger AO */
 };
 
-/*==========================================================================*/
-/* Active Object Handles */
-/*==========================================================================*/
-extern QActive * const AO_Counter;
-extern QActive * const AO_Timer;
-extern QActive * const AO_Logger;
+/* Pointers to active object instances */
+extern QActive *AO_Counter; /* Counter AO instance pointer */
+extern QActive *AO_Timer;   /* Timer AO instance pointer */
+extern QActive *AO_Logger;  /* Logger AO instance pointer */
 
-/*==========================================================================*/
-/* Global Synchronization Objects */
-/*==========================================================================*/
-extern rt_mutex_t g_log_mutex;      /* Mutex for thread-safe logging */
-extern rt_mutex_t g_stats_mutex;    /* Mutex for statistics access */
+/* Mutex for thread-safe logging */
+extern rt_mutex_t g_log_mutex;
+/* Mutex for statistics access */
+extern rt_mutex_t g_stats_mutex;
 
-/*==========================================================================*/
-/* Shared Statistics Structure */
-/*==========================================================================*/
+/* Structure for shared performance test statistics */
 typedef struct {
-    volatile uint32_t counter_updates;
-    volatile uint32_t timer_ticks;
-    volatile uint32_t timer_reports;
-    volatile uint32_t log_messages;
-    volatile uint32_t test_duration_ms;
-    volatile rt_bool_t test_running;
+    volatile uint32_t counter_updates;   /* Number of counter updates */
+    volatile uint32_t timer_ticks;       /* Number of timer ticks */
+    volatile uint32_t timer_reports;     /* Number of timer reports */
+    volatile uint32_t log_messages;      /* Number of log messages */
+    volatile uint32_t test_duration_ms;  /* Test duration in milliseconds */
+    volatile rt_bool_t test_running;     /* Test running status flag */
 } PerformanceStats;
 
-extern PerformanceStats g_perf_stats;
+extern PerformanceStats g_perf_stats; /* Global statistics instance */
 
-/*==========================================================================*/
-/* Application Functions */
-/*==========================================================================*/
-
-/* Initialize the performance test application */
+/* Function to initialize the performance test application */
 void PerformanceApp_init(void);
 
-/* Start the performance test */
+/* Function to start the performance test */
 int PerformanceApp_start(void);
 
-/* Stop the performance test */
+/* Function to stop the performance test */
 void PerformanceApp_stop(void);
 
-/* Get current performance statistics */
+/* Function to get current performance statistics */
 void PerformanceApp_getStats(PerformanceStats *stats);
 
-/* Reset performance statistics */
+/* Function to reset performance statistics */
 void PerformanceApp_resetStats(void);
 
-/* Check if QF framework is already initialized */
+/* Function to check if QF framework is already initialized */
 rt_bool_t PerformanceApp_isQFInitialized(void);
 
-/* Check if Active Objects are already started */
+/* Function to check if Active Objects are already started */
 rt_bool_t PerformanceApp_areAOsStarted(void);
 
-/*==========================================================================*/
-/* BSP Function Declarations */
-/*==========================================================================*/
+/* BSP initialization function */
 void BSP_init(void);
+/* Function to get current timestamp in milliseconds */
 uint32_t BSP_getTimestampMs(void);
+/* Function to turn on the LED */
 void BSP_ledOn(void);
+/* Function to turn off the LED */
 void BSP_ledOff(void);
+/* Function to toggle the LED state */
 void BSP_ledToggle(void);
 
-/*==========================================================================*/
-/* RT-Thread MSH Command Prototypes */
-/*==========================================================================*/
+/* RT-Thread MSH command: start performance test */
 int perf_test_start_cmd(int argc, char** argv);
+/* RT-Thread MSH command: stop performance test */
 int perf_test_stop_cmd(int argc, char** argv);
+/* RT-Thread MSH command: show performance test statistics */
 int perf_test_stats_cmd(int argc, char** argv);
+/* RT-Thread MSH command: reset performance test statistics */
 int perf_test_reset_cmd(int argc, char** argv);
 
 #endif /* APP_MAIN_H_ */

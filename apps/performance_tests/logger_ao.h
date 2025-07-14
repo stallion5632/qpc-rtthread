@@ -34,8 +34,8 @@
 /*==========================================================================*/
 /* Logger AO Configuration */
 /*==========================================================================*/
-#define LOGGER_QUEUE_SIZE       (32U)     /* Event queue size (larger for logs) */
-#define LOGGER_STACK_SIZE       (1024U)   /* Stack size in bytes (larger for string processing) */
+#define LOGGER_QUEUE_SIZE       (128U)     /* Event queue size (larger for logs) */
+#define LOGGER_STACK_SIZE       (2048U)   /* Stack size in bytes (larger for string processing) */
 
 /*==========================================================================*/
 /* Logger Log Levels */

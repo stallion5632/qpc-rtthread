@@ -29,7 +29,9 @@
 #include "bsp.h"
 #include <stdio.h>
 
-Q_DEFINE_THIS_FILE
+Q_DEFINE_THIS_MODULE("bsp")
+#define rt_hw_interrupt_enable(x)
+#define rt_hw_interrupt_disable()
 
 /*==========================================================================*/
 /* Local definitions */
@@ -58,12 +60,13 @@ static volatile uint32_t l_critical_nesting = 0U;
 /* System Initialization */
 /*==========================================================================*/
 void BSP_init(void) {
+    rt_kprintf("[QPC] module: %s\n", Q_this_module_);
     /* Initialize performance monitoring */
     BSP_perfInit();
-    
+
     /* Initialize LED (simulated) */
     BSP_ledInit();
-    
+
     /* Note: RT-Thread system initialization is handled by the framework */
     rt_kprintf("BSP: Board Support Package initialized\n");
 }
@@ -141,14 +144,15 @@ uint32_t BSP_getMemFree(void) {
 /* Performance Monitoring */
 /*==========================================================================*/
 void BSP_perfInit(void) {
+    rt_kprintf("[QPC] module: %s\n", Q_this_module_);
     if (!l_perf_initialized) {
         /* Enable trace in DEMCR */
         DWT_DEMCR |= DWT_DEMCR_TRCENA_Msk;
-        
+
         /* Reset and enable cycle counter */
         DWT_CYCCNT = 0U;
         DWT_CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-        
+
         l_perf_initialized = RT_TRUE;
     }
 }
@@ -203,14 +207,14 @@ void BSP_criticalSectionExit(void) {
 void BSP_errorHandler(const char *file, int line, const char *func) {
     /* Thread-safe error reporting */
     rt_kprintf("ASSERTION FAILED: %s:%d in %s\n", file, line, func);
-    
+
     /* In a real system, you might want to:
      * 1. Log error to persistent storage
      * 2. Trigger system reset
      * 3. Enter safe mode
      * 4. Send error notification
      */
-    
+
     /* For now, just loop indefinitely */
     for (;;) {
         BSP_ledToggle();
@@ -225,12 +229,12 @@ rt_size_t BSP_getThreadStackUsed(rt_thread_t thread) {
     if (thread == RT_NULL) {
         return 0U;
     }
-    
+
     /* Calculate stack usage - this is platform/implementation specific */
     rt_uint8_t *stack_start = (rt_uint8_t *)thread->stack_addr;
     rt_uint8_t *stack_end = stack_start + thread->stack_size;
     rt_uint8_t *stack_ptr = (rt_uint8_t *)thread->sp;
-    
+
     if (stack_ptr >= stack_start && stack_ptr <= stack_end) {
         return (rt_size_t)(stack_end - stack_ptr);
     } else {
@@ -242,7 +246,7 @@ rt_size_t BSP_getThreadStackFree(rt_thread_t thread) {
     if (thread == RT_NULL) {
         return 0U;
     }
-    
+
     rt_size_t used = BSP_getThreadStackUsed(thread);
     if (used <= thread->stack_size) {
         return thread->stack_size - used;

@@ -34,8 +34,8 @@
 /*==========================================================================*/
 /* Timer AO Configuration */
 /*==========================================================================*/
-#define TIMER_QUEUE_SIZE        (16U)     /* Event queue size */
-#define TIMER_STACK_SIZE        (512U)    /* Stack size in bytes */
+#define TIMER_QUEUE_SIZE        (128U)     /* Event queue size */
+#define TIMER_STACK_SIZE        (2048U)    /* Stack size in bytes */
 
 /*==========================================================================*/
 /* Timer AO States */

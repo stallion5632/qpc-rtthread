@@ -30,7 +30,7 @@
 #include "logger_ao.h"
 #include "bsp.h"
 
-Q_DEFINE_THIS_FILE
+Q_DEFINE_THIS_MODULE("counter_ao")
 
 /*==========================================================================*/
 /* Counter AO Local Definitions */
@@ -48,14 +48,15 @@ static CounterAO l_counterAO;
 /* Counter AO Public Interface */
 /*==========================================================================*/
 void CounterAO_ctor(void) {
+    rt_kprintf("[QPC] module: %s\n", Q_this_module_);
     CounterAO * const me = &l_counterAO;
-    
+
     /* Call base class constructor */
     QActive_ctor(&me->super, Q_STATE_CAST(&CounterAO_initial));
-    
+
     /* Initialize time event */
     QTimeEvt_ctorX(&me->timeEvt, &me->super, COUNTER_UPDATE_SIG, 0U);
-    
+
     /* Initialize instance variables */
     me->counter_value = 0U;
     me->update_count = 0U;
@@ -86,26 +87,26 @@ rt_bool_t CounterAO_isRunning(void) {
 /*==========================================================================*/
 static QState CounterAO_initial(CounterAO * const me, QEvt const * const e) {
     (void)e; /* Suppress unused parameter warning */
-    
+
     /* Initialize the Counter AO */
     me->counter_value = 0U;
     me->update_count = 0U;
     me->is_running = RT_FALSE;
-    
+
     LoggerAO_logDebug("CounterAO: Initial state entered");
-    
+
     /* Subscribe to relevant signals */
     QActive_subscribe((QActive *)me, APP_START_SIG);
     QActive_subscribe((QActive *)me, APP_STOP_SIG);
     QActive_subscribe((QActive *)me, COUNTER_START_SIG);
     QActive_subscribe((QActive *)me, COUNTER_STOP_SIG);
-    
+
     return Q_TRAN(&CounterAO_stopped);
 }
 
 static QState CounterAO_stopped(CounterAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             me->is_running = RT_FALSE;
@@ -136,22 +137,22 @@ static QState CounterAO_stopped(CounterAO * const me, QEvt const * const e) {
             break;
         }
     }
-    
+
     return status;
 }
 
 static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             me->is_running = RT_TRUE;
-            
+
             /* Start the periodic timer for counter updates */
-            QTimeEvt_armX(&me->timeEvt, 
+            QTimeEvt_armX(&me->timeEvt,
                          BSP_TICKS_PER_SEC * COUNTER_UPDATE_INTERVAL_MS / 1000U,
                          BSP_TICKS_PER_SEC * COUNTER_UPDATE_INTERVAL_MS / 1000U);
-            
+
             LoggerAO_logInfo("CounterAO: Running state entered, timer started");
             status = Q_HANDLED();
             break;
@@ -168,21 +169,21 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
             /* Increment counter value */
             ++me->counter_value;
             ++me->update_count;
-            
+
             /* Update global statistics */
             rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
             ++g_perf_stats.counter_updates;
             rt_mutex_release(g_stats_mutex);
-            
+
             /* Toggle LED to show activity */
             BSP_ledToggle();
-            
+
             /* Log periodic updates (every 10th update) */
             if ((me->update_count % 10U) == 0U) {
-                LoggerAO_logInfo("CounterAO: Counter value = %u, updates = %u", 
+                LoggerAO_logInfo("CounterAO: Counter value = %u, updates = %u",
                                me->counter_value, me->update_count);
             }
-            
+
             /* Publish counter update event */
             CounterUpdateEvt *counterEvt = Q_NEW(CounterUpdateEvt, COUNTER_UPDATE_SIG);
             if (counterEvt != (CounterUpdateEvt *)0) {
@@ -190,7 +191,7 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
                 counterEvt->timestamp = BSP_getTimestampMs();
                 QF_PUBLISH((QEvt *)counterEvt, (void *)0);
             }
-            
+
             status = Q_HANDLED();
             break;
         }
@@ -211,6 +212,6 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
             break;
         }
     }
-    
+
     return status;
 }

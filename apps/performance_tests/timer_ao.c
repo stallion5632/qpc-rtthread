@@ -31,7 +31,7 @@
 #include "logger_ao.h"
 #include "bsp.h"
 
-Q_DEFINE_THIS_FILE
+Q_DEFINE_THIS_MODULE("timer_ao")
 
 /*==========================================================================*/
 /* Timer AO Local Definitions */
@@ -50,15 +50,16 @@ static TimerAO l_timerAO;
 /* Timer AO Public Interface */
 /*==========================================================================*/
 void TimerAO_ctor(void) {
+    rt_kprintf("[QPC] module: %s\n", Q_this_module_);
     TimerAO * const me = &l_timerAO;
-    
+
     /* Call base class constructor */
     QActive_ctor(&me->super, Q_STATE_CAST(&TimerAO_initial));
-    
+
     /* Initialize time events */
     QTimeEvt_ctorX(&me->tickTimeEvt, &me->super, TIMER_TICK_SIG, 0U);
     QTimeEvt_ctorX(&me->reportTimeEvt, &me->super, TIMER_REPORT_SIG, 0U);
-    
+
     /* Initialize instance variables */
     me->tick_count = 0U;
     me->start_time_ms = 0U;
@@ -105,7 +106,7 @@ TimerState TimerAO_getCurrentState(void) {
 /*==========================================================================*/
 static QState TimerAO_initial(TimerAO * const me, QEvt const * const e) {
     (void)e; /* Suppress unused parameter warning */
-    
+
     /* Initialize the Timer AO */
     me->tick_count = 0U;
     me->start_time_ms = 0U;
@@ -113,22 +114,22 @@ static QState TimerAO_initial(TimerAO * const me, QEvt const * const e) {
     me->report_count = 0U;
     me->current_state = TIMER_STATE_STOPPED;
     me->is_running = RT_FALSE;
-    
+
     LoggerAO_logDebug("TimerAO: Initial state entered");
-    
+
     /* Subscribe to relevant signals */
     QActive_subscribe((QActive *)me, APP_START_SIG);
     QActive_subscribe((QActive *)me, APP_STOP_SIG);
     QActive_subscribe((QActive *)me, TIMER_START_SIG);
     QActive_subscribe((QActive *)me, TIMER_STOP_SIG);
     QActive_subscribe((QActive *)me, COUNTER_UPDATE_SIG);
-    
+
     return Q_TRAN(&TimerAO_stopped);
 }
 
 static QState TimerAO_stopped(TimerAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             me->is_running = RT_FALSE;
@@ -160,30 +161,30 @@ static QState TimerAO_stopped(TimerAO * const me, QEvt const * const e) {
             break;
         }
     }
-    
+
     return status;
 }
 
 static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             me->is_running = RT_TRUE;
             me->current_state = TIMER_STATE_RUNNING;
             me->start_time_ms = BSP_getTimestampMs();
             me->last_report_time = me->start_time_ms;
-            
+
             /* Start the tick timer (100ms intervals) */
-            QTimeEvt_armX(&me->tickTimeEvt, 
+            QTimeEvt_armX(&me->tickTimeEvt,
                          BSP_TICKS_PER_SEC / 10U,  /* 100ms */
                          BSP_TICKS_PER_SEC / 10U); /* Periodic */
-            
+
             /* Start the report timer (1 second intervals) */
-            QTimeEvt_armX(&me->reportTimeEvt, 
+            QTimeEvt_armX(&me->reportTimeEvt,
                          BSP_TICKS_PER_SEC * TIMER_REPORT_INTERVAL_MS / 1000U,
                          BSP_TICKS_PER_SEC * TIMER_REPORT_INTERVAL_MS / 1000U);
-            
+
             LoggerAO_logInfo("TimerAO: Running state entered, timers started");
             status = Q_HANDLED();
             break;
@@ -200,13 +201,13 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
         case TIMER_TICK_SIG: {
             /* Increment tick count */
             ++me->tick_count;
-            
+
             /* Update global statistics */
             rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
             ++g_perf_stats.timer_ticks;
             g_perf_stats.test_duration_ms = TimerAO_getElapsedMs();
             rt_mutex_release(g_stats_mutex);
-            
+
             /* Publish timer tick event */
             TimerTickEvt *tickEvt = Q_NEW(TimerTickEvt, TIMER_TICK_SIG);
             if (tickEvt != (TimerTickEvt *)0) {
@@ -214,7 +215,7 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
                 tickEvt->timestamp = BSP_getTimestampMs();
                 QF_PUBLISH((QEvt *)tickEvt, (void *)0);
             }
-            
+
             status = Q_HANDLED();
             break;
         }
@@ -240,31 +241,31 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
             break;
         }
     }
-    
+
     return status;
 }
 
 static QState TimerAO_reporting(TimerAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             me->current_state = TIMER_STATE_REPORTING;
-            
+
             /* Generate report */
             uint32_t current_time = BSP_getTimestampMs();
             uint32_t elapsed_since_report = current_time - me->last_report_time;
             uint32_t counter_value = CounterAO_getValue();
-            
+
             ++me->report_count;
             me->last_report_time = current_time;
-            
+
             /* Update global statistics */
             rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
             ++g_perf_stats.timer_reports;
             g_perf_stats.test_duration_ms = TimerAO_getElapsedMs();
             rt_mutex_release(g_stats_mutex);
-            
+
             /* Create and publish timer report event */
             TimerReportEvt *reportEvt = Q_NEW(TimerReportEvt, TIMER_REPORT_SIG);
             if (reportEvt != (TimerReportEvt *)0) {
@@ -273,11 +274,11 @@ static QState TimerAO_reporting(TimerAO * const me, QEvt const * const e) {
                 reportEvt->counter_value = counter_value;
                 QF_PUBLISH((QEvt *)reportEvt, (void *)0);
             }
-            
+
             /* Log report with thread-safe logging */
             LoggerAO_logInfo("TimerAO: Report #%u - Elapsed: %u ms, Ticks: %u, Counter: %u",
                            me->report_count, elapsed_since_report, me->tick_count, counter_value);
-            
+
             /* Immediately transition back to running */
             status = Q_TRAN(&TimerAO_running);
             break;
@@ -299,6 +300,6 @@ static QState TimerAO_reporting(TimerAO * const me, QEvt const * const e) {
             break;
         }
     }
-    
+
     return status;
 }

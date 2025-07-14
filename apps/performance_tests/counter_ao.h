@@ -34,8 +34,8 @@
 /*==========================================================================*/
 /* Counter AO Configuration */
 /*==========================================================================*/
-#define COUNTER_QUEUE_SIZE      (16U)     /* Event queue size */
-#define COUNTER_STACK_SIZE      (512U)    /* Stack size in bytes */
+#define COUNTER_QUEUE_SIZE      (128U)     /* Event queue size */
+#define COUNTER_STACK_SIZE      (2048U)    /* Stack size in bytes */
 
 /*==========================================================================*/
 /* Counter AO State Machine */
