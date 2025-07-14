@@ -294,17 +294,4 @@ void BSP_logUnlock(void) {
     }
 }
 
-/*==========================================================================*/
-/* QPC Framework Integration */
-/*==========================================================================*/
-
-/* QF_onStartup implementation - basic version */
-bool QF_onStartup(void) {
-    /* Initialize QF framework if needed */
-    return true; /* Return true if startup successful */
-}
-
-/* QF_onCleanup implementation */
-void QF_onCleanup(void) {
-    /* Cleanup QF framework if needed */
-}
+/* ...existing code... */
