@@ -99,12 +99,4 @@ rt_size_t BSP_getThreadStackFree(rt_thread_t thread);
 uint8_t BSP_getCpuUsage(void);
 uint32_t BSP_getIdleCount(void);
 
-/*==========================================================================*/
-/* Thread-safe logging support */
-/*==========================================================================*/
-
-/* Mutex-protected logging functions */
-void BSP_logLock(void);
-void BSP_logUnlock(void);
-
 #endif /* BSP_H_ */

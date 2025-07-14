@@ -31,18 +31,8 @@
 
 #include <rtthread.h>
 
-/* Enable mutex to protect log output from race conditions */
-#define SYS_LOG_USING_MUTEX
-
-#ifdef SYS_LOG_USING_MUTEX
-#include "rt_integration.h" /* For log_lock/unlock declarations */
-#define SYS_LOG_I(fmt, ...) do { log_lock(); rt_kprintf("[INFO ] " fmt "\r\n", ##__VA_ARGS__); log_unlock(); } while(0)
-#define SYS_LOG_D(fmt, ...) do { log_lock(); rt_kprintf("[DEBUG] " fmt "\r\n", ##__VA_ARGS__); log_unlock(); } while(0)
-#define SYS_LOG_E(fmt, ...) do { log_lock(); rt_kprintf("[ERROR] " fmt "\r\n", ##__VA_ARGS__); log_unlock(); } while(0)
-#else
 #define SYS_LOG_I(fmt, ...) rt_kprintf("[INFO ] " fmt "\r\n", ##__VA_ARGS__)
 #define SYS_LOG_D(fmt, ...) rt_kprintf("[DEBUG] " fmt "\r\n", ##__VA_ARGS__)
 #define SYS_LOG_E(fmt, ...) rt_kprintf("[ERROR] " fmt "\r\n", ##__VA_ARGS__)
-#endif
 
 #endif /* SYS_LOG_H_ */

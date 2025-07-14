@@ -27,7 +27,6 @@
 * <info@state-machine.com>
 ============================================================================*/
 #include "bsp.h"
-#include "rt_integration.h"
 #include <stdio.h>
 
 Q_DEFINE_THIS_MODULE("bsp")
@@ -65,7 +64,7 @@ static rt_timer_t l_qf_ticker = RT_NULL;
 /*==========================================================================*/
 static void qf_tick_handler(void *parameter) {
     (void)parameter; /* Suppress unused parameter warning */
-    
+
     /* Call QF tick processing - this drives all QTimeEvt objects */
     QTimeEvt_tick_(0U, (void *)0); /* ticker rate 0, no spy */
 }
@@ -305,55 +304,11 @@ uint32_t BSP_getIdleCount(void) {
     return ++simulated_idle; /* Simple simulation */
 }
 
-/*==========================================================================*/
-/* Thread-safe Logging Support */
-/*==========================================================================*/
-
-/* Declare external mutex from app_main.c */
-extern rt_mutex_t g_log_mutex;
-
-void BSP_logLock(void) {
-    if (g_log_mutex != RT_NULL) {
-        rt_mutex_take(g_log_mutex, RT_WAITING_FOREVER);
-    }
-}
-
-void BSP_logUnlock(void) {
-    if (g_log_mutex != RT_NULL) {
-        rt_mutex_release(g_log_mutex);
-    }
-}
-
-/* ...existing code... */
-
-/*==========================================================================*/
-/* RT-Thread Integration Functions */
-/*==========================================================================*/
-
-/* Implement the log lock/unlock functions for rt_integration.h */
-void log_lock(void) {
-    BSP_logLock();
-}
-
-void log_unlock(void) {
-    BSP_logUnlock();
-}
 
 #ifdef Q_SPY
 
-/* QS-RT-Thread lock/unlock functions for thread-safe trace */
-static void QS_onLock(void) {
-    log_lock();
-}
-
-static void QS_onUnlock(void) {
-    log_unlock();
-}
-
 bool QF_onStartup(void) {
     QS_init(NULL); /* Initialize QS */
-    QS_onLock_fun = &QS_onLock;
-    QS_onUnlock_fun = &QS_onUnlock;
     return true; /* Return true if startup successful */
 }
 #endif /* Q_SPY */
