@@ -3,24 +3,22 @@ from building import *
 
 cwd = GetCurrentDir()
 
-# Performance test source files
+# Performance test source files - New Active Object based implementation
 src = Split("""
-perf_common.c
-latency_test.c
-throughput_test.c
-jitter_test.c
-idle_cpu_test.c
-memory_test.c
-perf_test_suite.c
+app_main.c
+counter_ao.c
+timer_ao.c
+logger_ao.c
+bsp.c
 """)
 
 # Include paths
 path = [cwd]
 
 # Define the performance test group
-# This group depends on QPC and RT-Thread mailbox support
+# This group depends on QPC, RT-Thread mailbox support, and FINSH for MSH commands
 group = DefineGroup('qpc_perf_tests', src, 
-                   depend = ['PKG_USING_QPC', 'RT_USING_MAILBOX', 'RT_USING_FINSH'], 
+                   depend = ['PKG_USING_QPC', 'RT_USING_MAILBOX', 'RT_USING_FINSH', 'RT_USING_MUTEX'], 
                    CPPPATH = path)
 
 Return('group')
