@@ -247,6 +247,12 @@ static QState ProcessorAO_processing(ProcessorAO * const me, QEvt const * const 
             work_evt->work_id = me->processed_count;
             QACTIVE_POST(AO_Worker, &work_evt->super, me);
 
+             /* Post work again */
+            WorkerWorkEvt *work_evt2 = Q_NEW(WorkerWorkEvt, WORKER_WORK_SIG);
+            /* Distinguish by different IDs */
+            work_evt2->work_id = me->processed_count + 1000;
+            QACTIVE_POST(AO_Worker, &work_evt2->super, me);
+
             status = Q_TRAN(&ProcessorAO_idle);
             break;
         }
