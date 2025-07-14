@@ -27,9 +27,9 @@
 * <info@state-machine.com>
 ============================================================================*/
 #include "counter_ao.h"
-#include "logger_ao.h"
 #include "app_main.h"
 #include "bsp.h"
+#include "inc/sys_log.h"
 
 Q_DEFINE_THIS_MODULE("counter_ao")
 
@@ -95,7 +95,7 @@ static QState CounterAO_initial(CounterAO * const me, QEvt const * const e) {
     me->is_running = RT_FALSE;
 
     /* Reduce logging during startup to prevent event queue overflow */
-    /* LoggerAO_logDebug("CounterAO: Initial state entered"); */
+    /* SYS_LOG_D("CounterAO: Initial state entered"); */
 
     /* Subscribe to relevant signals */
     QActive_subscribe((QActive *)me, APP_START_SIG);
@@ -113,26 +113,26 @@ static QState CounterAO_stopped(CounterAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             me->is_running = RT_FALSE;
-            LoggerAO_logInfo("CounterAO: Stopped state entered");
+            SYS_LOG_I("CounterAO: Stopped state entered");
             status = Q_HANDLED();
             break;
         }
         case Q_EXIT_SIG: {
             /* Reduce startup logging to prevent queue overflow */
-            /* LoggerAO_logDebug("CounterAO: Exiting stopped state"); */
+            /* SYS_LOG_D("CounterAO: Exiting stopped state"); */
             status = Q_HANDLED();
             break;
         }
         case APP_START_SIG:
         case COUNTER_START_SIG: {
-            LoggerAO_logInfo("CounterAO: Starting counter");
+            SYS_LOG_I("CounterAO: Starting counter");
             status = Q_TRAN(&CounterAO_running);
             break;
         }
         case APP_STOP_SIG:
         case COUNTER_STOP_SIG: {
             /* Already stopped, just acknowledge */
-            LoggerAO_logDebug("CounterAO: Stop signal received while stopped");
+            SYS_LOG_D("CounterAO: Stop signal received while stopped");
             status = Q_HANDLED();
             break;
         }
@@ -157,7 +157,7 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
                          BSP_TICKS_PER_SEC * COUNTER_UPDATE_INTERVAL_MS / 1000U,
                          BSP_TICKS_PER_SEC * COUNTER_UPDATE_INTERVAL_MS / 1000U);
 
-            LoggerAO_logInfo("CounterAO: Running state entered, timer started");
+            SYS_LOG_I("CounterAO: Running state entered, timer started");
             status = Q_HANDLED();
             break;
         }
@@ -165,7 +165,7 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
             /* Disarm the timer */
             QTimeEvt_disarm(&me->timeEvt);
             me->is_running = RT_FALSE;
-            LoggerAO_logInfo("CounterAO: Exiting running state, timer stopped");
+            SYS_LOG_I("CounterAO: Exiting running state, timer stopped");
             status = Q_HANDLED();
             break;
         }
@@ -184,7 +184,7 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
 
             /* Log periodic updates (every 10th update) */
             if ((me->update_count % 10U) == 0U) {
-                LoggerAO_logInfo("CounterAO: Counter value = %u, updates = %u",
+                SYS_LOG_I("CounterAO: Counter value = %u, updates = %u",
                                me->counter_value, me->update_count);
             }
 
@@ -217,7 +217,7 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
 
             /* Log periodic updates (every 50th tick to reduce log volume) */
             if ((tickEvt->tick_count % 50U) == 0U) {
-                LoggerAO_logInfo("CounterAO: Timer tick #%u, counter = %u",
+                SYS_LOG_I("CounterAO: Timer tick #%u, counter = %u",
                                tickEvt->tick_count, me->counter_value);
             }
 
@@ -226,13 +226,13 @@ static QState CounterAO_running(CounterAO * const me, QEvt const * const e) {
         }
         case APP_STOP_SIG:
         case COUNTER_STOP_SIG: {
-            LoggerAO_logInfo("CounterAO: Stopping counter");
+            SYS_LOG_I("CounterAO: Stopping counter");
             status = Q_TRAN(&CounterAO_stopped);
             break;
         }
         case COUNTER_TIMEOUT_SIG: {
             /* Test timeout - stop the counter */
-            LoggerAO_logWarn("CounterAO: Test timeout reached");
+            SYS_LOG_E("CounterAO: Test timeout reached");
             status = Q_TRAN(&CounterAO_stopped);
             break;
         }

@@ -29,7 +29,6 @@
 #include "app_main.h"
 #include "counter_ao.h"
 #include "timer_ao.h"
-#include "logger_ao.h"
 #include "bsp.h"
 #include <finsh.h>
 #include <stdio.h>
@@ -52,9 +51,6 @@ static QSubscrList l_subscrSto[MAX_PUB_SIG];
 #ifndef TIMER_QUEUE_SIZE
 #define TIMER_QUEUE_SIZE 128U /* Event queue size for Timer AO */
 #endif
-#ifndef LOGGER_QUEUE_SIZE
-#define LOGGER_QUEUE_SIZE 256U /* Event queue size for Logger AO - increased for burst handling */
-#endif
 
 #ifndef COUNTER_STACK_SIZE
 #define COUNTER_STACK_SIZE 2048U /* Thread stack size for Counter AO */
@@ -62,28 +58,21 @@ static QSubscrList l_subscrSto[MAX_PUB_SIG];
 #ifndef TIMER_STACK_SIZE
 #define TIMER_STACK_SIZE 2048U /* Thread stack size for Timer AO */
 #endif
-#ifndef LOGGER_STACK_SIZE
-#define LOGGER_STACK_SIZE 2048U /* Thread stack size for Logger AO */
-#endif
 
 /* Event storage for Active Objects */
 static QEvt const *l_counterQueueSto[COUNTER_QUEUE_SIZE]; /* Event queue storage for Counter AO */
 static QEvt const *l_timerQueueSto[TIMER_QUEUE_SIZE];     /* Event queue storage for Timer AO */
-static QEvt const *l_loggerQueueSto[LOGGER_QUEUE_SIZE];   /* Event queue storage for Logger AO */
 
 /* AO thread stack memory */
 static uint8_t counter_stack[COUNTER_STACK_SIZE]; /* Thread stack for Counter AO */
 static uint8_t timer_stack[TIMER_STACK_SIZE];     /* Thread stack for Timer AO */
-static uint8_t logger_stack[LOGGER_STACK_SIZE];   /* Thread stack for Logger AO */
 
 /* Event pool size definitions */
 #define SMALL_EVENT_SIZE    sizeof(QEvt)             /* Size of small event pool element */
 #define MEDIUM_EVENT_SIZE   sizeof(CounterUpdateEvt) /* Size of medium event pool element */
-#define LARGE_EVENT_SIZE    sizeof(LogEvt)           /* Size of large event pool element */
 
 static QF_MPOOL_EL(QEvt) l_smlPoolSto[20U];              /* Small event pool storage */
 static QF_MPOOL_EL(CounterUpdateEvt) l_medPoolSto[10U];  /* Medium event pool storage */
-static QF_MPOOL_EL(LogEvt) l_lrgPoolSto[15U];            /* Large event pool storage */
 
 /* Application state tracking flags */
 static rt_bool_t l_qf_initialized = RT_FALSE; /* QF framework initialization flag */
@@ -112,7 +101,6 @@ PerformanceStats g_perf_stats = {
 /*==========================================================================*/
 QActive *AO_Counter = RT_NULL;
 QActive *AO_Timer   = RT_NULL;
-QActive *AO_Logger  = RT_NULL;
 
 /*==========================================================================*/
 /* Application Initialization */
@@ -143,19 +131,15 @@ void PerformanceApp_init(void) {
         /* Initialize event pools */
         QF_poolInit(l_smlPoolSto, sizeof(l_smlPoolSto), SMALL_EVENT_SIZE);
         QF_poolInit(l_medPoolSto, sizeof(l_medPoolSto), MEDIUM_EVENT_SIZE);
-        QF_poolInit(l_lrgPoolSto, sizeof(l_lrgPoolSto), LARGE_EVENT_SIZE);
 
         l_qf_initialized = RT_TRUE;
     }
 
-
     /* Construct Active Objects */
     CounterAO_ctor();
     TimerAO_ctor();
-    LoggerAO_ctor();
     AO_Counter = (QActive *)CounterAO_getInstance();
     AO_Timer   = (QActive *)TimerAO_getInstance();
-    AO_Logger  = (QActive *)LoggerAO_getInstance();
 
     /* Reset statistics */
     PerformanceApp_resetStats();
@@ -175,7 +159,6 @@ int PerformanceApp_start(void) {
         /* Set thread names before starting Active Objects */
         QActive_setAttr(AO_Counter, THREAD_NAME_ATTR, "counter_ao");
         QActive_setAttr(AO_Timer, THREAD_NAME_ATTR, "timer_ao");
-        QActive_setAttr(AO_Logger, THREAD_NAME_ATTR, "logger_ao");
 
         /* Start Active Objects with their priorities and event queues */
         QACTIVE_START(AO_Counter,
@@ -194,14 +177,6 @@ int PerformanceApp_start(void) {
                       TIMER_STACK_SIZE,
                       (QEvt *)0);
 
-        QACTIVE_START(AO_Logger,
-                      (uint_fast8_t)LOGGER_AO_PRIO,
-                      l_loggerQueueSto,
-                      Q_DIM(l_loggerQueueSto),
-                      logger_stack,
-                      LOGGER_STACK_SIZE,
-                      (QEvt *)0);
-
         l_aos_started = RT_TRUE;
     }
 
@@ -212,16 +187,14 @@ int PerformanceApp_start(void) {
 
     /* Post start signals to Active Objects with small delays to reduce event burst */
     static QEvt const startEvt = { APP_START_SIG, 0U, 0U };
-    QACTIVE_POST(AO_Logger, &startEvt, (void *)0);
-    rt_thread_mdelay(10); /* Small delay */
     
     QACTIVE_POST(AO_Timer, &startEvt, (void *)0);
     rt_thread_mdelay(10); /* Small delay */
     
     QACTIVE_POST(AO_Counter, &startEvt, (void *)0);
 
-    /* Log the test start */
-    LoggerAO_logInfo("Performance test started");
+    /* Log the test start using direct logging */
+    rt_kprintf("[INFO ] Performance test started\n");
 
     /* Event generation optimization: can be further tuned here */
     /* Example: burst generate counter/timer events for stress test */
@@ -252,10 +225,9 @@ void PerformanceApp_stop(void) {
     static QEvt const stopEvt = { APP_STOP_SIG, 0U, 0U };
     QACTIVE_POST(AO_Counter, &stopEvt, (void *)0);
     QACTIVE_POST(AO_Timer, &stopEvt, (void *)0);
-    QACTIVE_POST(AO_Logger, &stopEvt, (void *)0);
 
-    /* Log the test stop */
-    LoggerAO_logInfo("Performance test stopped");
+    /* Log the test stop using direct logging */
+    rt_kprintf("[INFO ] Performance test stopped\n");
 }
 
 /*==========================================================================*/
@@ -347,7 +319,6 @@ int perf_test_reset_cmd(int argc, char** argv) {
 
     rt_kprintf("Resetting performance test statistics...\n");
     PerformanceApp_resetStats();
-    LoggerAO_resetCounters();
     rt_kprintf("Statistics reset complete\n");
     return 0;
 }

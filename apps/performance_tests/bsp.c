@@ -27,6 +27,7 @@
 * <info@state-machine.com>
 ============================================================================*/
 #include "bsp.h"
+#include "rt_integration.h"
 #include <stdio.h>
 
 Q_DEFINE_THIS_MODULE("bsp")
@@ -295,3 +296,35 @@ void BSP_logUnlock(void) {
 }
 
 /* ...existing code... */
+
+/*==========================================================================*/
+/* RT-Thread Integration Functions */
+/*==========================================================================*/
+
+/* Implement the log lock/unlock functions for rt_integration.h */
+void log_lock(void) {
+    BSP_logLock();
+}
+
+void log_unlock(void) {
+    BSP_logUnlock();
+}
+
+#ifdef Q_SPY
+
+/* QS-RT-Thread lock/unlock functions for thread-safe trace */
+static void QS_onLock(void) {
+    log_lock();
+}
+
+static void QS_onUnlock(void) {
+    log_unlock();
+}
+
+bool QF_onStartup(void) {
+    QS_init(NULL); /* Initialize QS */
+    QS_onLock_fun = &QS_onLock;
+    QS_onUnlock_fun = &QS_onUnlock;
+    return true; /* Return true if startup successful */
+}
+#endif /* Q_SPY */

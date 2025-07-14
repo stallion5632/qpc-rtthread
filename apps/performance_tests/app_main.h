@@ -57,11 +57,6 @@ enum PerformanceAppSignals {
     TIMER_REPORT_SIG,
     TIMER_TIMEOUT_SIG,
 
-    /* Logger AO signals */
-    LOGGER_LOG_SIG,
-    LOGGER_FLUSH_SIG,
-    LOGGER_TIMEOUT_SIG,
-
     /* Application control signals */
     APP_START_SIG,
     APP_STOP_SIG,
@@ -107,14 +102,12 @@ typedef struct {
 /* Enumeration for performance test AO priorities */
 enum PerformanceAppPriorities {
     COUNTER_AO_PRIO = 1U, /* Priority for Counter AO */
-    TIMER_AO_PRIO   = 2U, /* Priority for Timer AO */
-    LOGGER_AO_PRIO  = 3U  /* Priority for Logger AO */
+    TIMER_AO_PRIO   = 2U  /* Priority for Timer AO */
 };
 
 /* Pointers to active object instances */
 extern QActive *AO_Counter; /* Counter AO instance pointer */
 extern QActive *AO_Timer;   /* Timer AO instance pointer */
-extern QActive *AO_Logger;  /* Logger AO instance pointer */
 
 /* Mutex for thread-safe logging */
 extern rt_mutex_t g_log_mutex;

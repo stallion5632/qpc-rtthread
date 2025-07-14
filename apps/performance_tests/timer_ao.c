@@ -28,8 +28,8 @@
 ============================================================================*/
 #include "timer_ao.h"
 #include "counter_ao.h"
-#include "logger_ao.h"
 #include "bsp.h"
+#include "inc/sys_log.h"
 
 Q_DEFINE_THIS_MODULE("timer_ao")
 
@@ -116,7 +116,7 @@ static QState TimerAO_initial(TimerAO * const me, QEvt const * const e) {
     me->is_running = RT_FALSE;
 
     /* Reduce logging during startup to prevent event queue overflow */
-    /* LoggerAO_logDebug("TimerAO: Initial state entered"); */
+    /* SYS_LOG_D("TimerAO: Initial state entered"); */
 
     /* Subscribe to relevant signals */
     QActive_subscribe((QActive *)me, APP_START_SIG);
@@ -135,26 +135,26 @@ static QState TimerAO_stopped(TimerAO * const me, QEvt const * const e) {
         case Q_ENTRY_SIG: {
             me->is_running = RT_FALSE;
             me->current_state = TIMER_STATE_STOPPED;
-            LoggerAO_logInfo("TimerAO: Stopped state entered");
+            SYS_LOG_I("TimerAO: Stopped state entered");
             status = Q_HANDLED();
             break;
         }
         case Q_EXIT_SIG: {
             /* Reduce startup logging to prevent queue overflow */
-            /* LoggerAO_logDebug("TimerAO: Exiting stopped state"); */
+            /* SYS_LOG_D("TimerAO: Exiting stopped state"); */
             status = Q_HANDLED();
             break;
         }
         case APP_START_SIG:
         case TIMER_START_SIG: {
-            LoggerAO_logInfo("TimerAO: Starting timer");
+            SYS_LOG_I("TimerAO: Starting timer");
             status = Q_TRAN(&TimerAO_running);
             break;
         }
         case APP_STOP_SIG:
         case TIMER_STOP_SIG: {
             /* Already stopped, just acknowledge */
-            LoggerAO_logDebug("TimerAO: Stop signal received while stopped");
+            SYS_LOG_D("TimerAO: Stop signal received while stopped");
             status = Q_HANDLED();
             break;
         }
@@ -187,7 +187,7 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
                          BSP_TICKS_PER_SEC * TIMER_REPORT_INTERVAL_MS / 1000U,
                          BSP_TICKS_PER_SEC * TIMER_REPORT_INTERVAL_MS / 1000U);
 
-            LoggerAO_logInfo("TimerAO: Running state entered, timers started");
+            SYS_LOG_I("TimerAO: Running state entered, timers started");
             status = Q_HANDLED();
             break;
         }
@@ -196,7 +196,7 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
             QTimeEvt_disarm(&me->tickTimeEvt);
             QTimeEvt_disarm(&me->reportTimeEvt);
             me->is_running = RT_FALSE;
-            LoggerAO_logInfo("TimerAO: Exiting running state, timers stopped");
+            SYS_LOG_I("TimerAO: Exiting running state, timers stopped");
             status = Q_HANDLED();
             break;
         }
@@ -228,13 +228,13 @@ static QState TimerAO_running(TimerAO * const me, QEvt const * const e) {
         }
         case APP_STOP_SIG:
         case TIMER_STOP_SIG: {
-            LoggerAO_logInfo("TimerAO: Stopping timer");
+            SYS_LOG_I("TimerAO: Stopping timer");
             status = Q_TRAN(&TimerAO_stopped);
             break;
         }
         case TIMER_TIMEOUT_SIG: {
             /* Test timeout - stop the timer */
-            LoggerAO_logWarn("TimerAO: Test timeout reached");
+            SYS_LOG_E("TimerAO: Test timeout reached");
             status = Q_TRAN(&TimerAO_stopped);
             break;
         }
@@ -278,7 +278,7 @@ static QState TimerAO_reporting(TimerAO * const me, QEvt const * const e) {
             }
 
             /* Log report with thread-safe logging */
-            LoggerAO_logInfo("TimerAO: Report #%u - Elapsed: %u ms, Ticks: %u, Counter: %u",
+            SYS_LOG_I("TimerAO: Report #%u - Elapsed: %u ms, Ticks: %u, Counter: %u",
                            me->report_count, elapsed_since_report, me->tick_count, counter_value);
 
             /* Immediately transition back to running */
@@ -286,13 +286,13 @@ static QState TimerAO_reporting(TimerAO * const me, QEvt const * const e) {
             break;
         }
         case Q_EXIT_SIG: {
-            LoggerAO_logDebug("TimerAO: Exiting reporting state");
+            SYS_LOG_D("TimerAO: Exiting reporting state");
             status = Q_HANDLED();
             break;
         }
         case APP_STOP_SIG:
         case TIMER_STOP_SIG: {
-            LoggerAO_logInfo("TimerAO: Stopping timer from reporting state");
+            SYS_LOG_I("TimerAO: Stopping timer from reporting state");
             status = Q_TRAN(&TimerAO_stopped);
             break;
         }
