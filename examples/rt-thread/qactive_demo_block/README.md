@@ -1,10 +1,9 @@
-# QActive Demo for RT-Thread（QActive与RT-Thread集成演示）
+# QActive Demo for RT-Thread (block)
 
-本目录展示了QPC Active Objects（QActive）在RT-Thread上的原生集成与应用，适用于工业物联网网关等场景。
 
-## 项目简介
+## 概述
 
-本演示系统以工业数据采集与存储为例，展示QPC的主动对象（QActive）与RT-Thread原生线程的协作模式，涵盖事件驱动、线程调度、同步机制等关键集成点。
+本示例演示 QPC 框架下主动对象（QActive）与 RT-Thread 原生线程的协作。
 
 ## 系统架构
 
@@ -22,6 +21,10 @@
 - **互斥锁（Mutex）**：保护共享配置
 - **信号量（Semaphore）**：协调存储操作
 - **事件集（Event Set）**：系统级通知与状态同步
+
+
+### 当前架构缺陷
+主动对象（QActive）内部直接调用RT-Thread的阻塞型API（如信号量、互斥锁等），破坏了QActive“run-to-complete”事件处理语义，导致主动对象线程可能被挂起，进而影响整个系统的实时响应能力和事件处理的确定性。
 
 ## 系统结构图
 
@@ -220,91 +223,130 @@ graph LR
    - **事件协调**：系统事件通过RT-Thread事件集协调。
    - **MSH命令**：Shell命令实时控制QActive组件。
 
-### **运行时控制与技术细节**
+### 输出结果
 
-- MSH命令用于启动、停止QActive组件、查看统计信息、配置定时参数、监控系统状态等。
-
-- QActive使用QPC的事件池进行动态分配，RT-Thread线程使用其自身内存管理，共享资源通过RT-Thread同步原语保护。
-
-- 采用优雅降级，系统仍可运行，错误会通过健康监控报告，并自动恢复。
-
-- QActive组件优先级高于RT-Thread线程，事件驱动架构减少CPU占用，优化同步设计减少阻塞。
-
-### **集成的优势**
-
-- 支持RT-Thread生态系统和工具，支持QPC的事件驱动架构和层次化状态机，提升开发效率。
-
-- QPC确保实时性，配合RT-Thread调度机制，保障关键任务响应。
-
-- QPC提供性能分析工具和健康监控，RT-Thread的资源管理和调度系统提升系统优化。
-
-
-## Technical Details
-
-### Memory Management
-- **QActive Objects**: Use QPC's event pools for dynamic event allocation
-- **RT-Thread Threads**: Use RT-Thread's dynamic memory management
-- **Shared Resources**: Protected by RT-Thread synchronization primitives
-
-#### Event Pool Configuration
-The system uses three separate event pools organized by event size:
-
-| Event Pool | Event Types | Size | Count | Purpose |
-|------------|-------------|------|-------|---------|
-| basicEventPool | QEvt | 4 bytes | 50 | Basic signals (timeouts, commands) |
-| shared8Pool | SensorDataEvt, ProcessorResultEvt | 8 bytes | 60 | Data and result events |
-| worker16Pool | WorkerWorkEvt | 16 bytes | 40 | Work events with RT-Thread extensions |
-
-**Critical:** WorkerWorkEvt events require 16 bytes due to RT-Thread extensions (work_id, data_size, priority). Using incorrect pool size will cause Q_NEW() assertion failures.
-
-### Troubleshooting
-
-#### Common Issues
-
-**1. QF Dynamic Allocation Assertion Failed**
 ```
-(qf_dyn) assertion failed at function:, line number:310
+=== Advanced Dispatcher Demo Auto-Initialize ===
+=== Advanced Dispatcher Demo Initialize ===
+Advanced Demo: Initialization completed
+
+==== Advanced Dispatcher Demo Starting ====
+[Producer] Starting event production
+[QActive_start_] AO: 6007822c, name: , registered, QHSM: 6007822c
+[QActive_start_] Thread startup result: 0, state: 1
+Advanced Demo: Producer AO started (Priority 1)
+[Consumer] Ready to consume events
+[QActive_start_] AO: 60078328, name: , registered, QHSM: 60078328
+[QActive_start_] Thread startup result: 0, state: 1
+Advanced Demo: Consumer AO started (Priority 2)
+[Monitor] Starting system monitoring
+[QActive_start_] AO: 60078420, name: , registered, QHSM: 60078420
+[QActive_start_] Thread startup result: 0, state: 1
+Advanced Demo: Monitor AO started (Priority 3)
+[Controller] Starting automatic strategy control
+[QActive_start_] AO: 60078518, name: , registered, QHSM: 60078518
+[QActive_start_] Thread startup result: 0, state: 1
+Advanced Demo: Controller AO started (Priority 4)
+Advanced Demo: All AOs started - Demonstrating advanced dispatcher features
+============================================
+Advanced Demo: Already initialized, skipping...
+[System] Starting Advanced Dispatcher Demo
+Advan> d Demo: Already started, skipping...
+[System] AmSystedvanced Demo startup completed
+[thread_function] AO thread started: 60078420, name: , prio: 29, stat: 3
+[thread_function] AO thread started: 60078328, name: , prio: 30, stat: 3
+[thread_function] AO thread started: 60078328, name: , prio: 30, stat: 3
+[I/SDIO] SD card capacity 65536 KB.
+[thread_function] AO thread started: 6007822c, name: , prio: 31, stat: 3
+[Consumer] HIGH_PRIO #1: data=10, seq=1
+[Consumer] MERGEABLE #1: data=200, seq=2
+[Consumer] NORMAL_PRIO #1: data=3000, seq=3
+[Consumer] LOW_PRIO #1: data=40000, seq=4
+[Consumer] CRITICAL #1: data=5, seq=5
+[Consumer] HIGH_PRIO #2: data=60, seq=6
+[Consumer] MERGEABLE #2: data=700, seq=7
+[Consumer] NORMAL_PRIO #2: data=8000, seq=8
+[Consumer] LOW_PRIO #2: data=90000, seq=9
+[Consumer] CRITICAL #2: data=10, seq=10
+[Consumer] HIGH_PRIO #3: data=110, seq=11
+[Consumer] MERGEABLE #3: data=1200, seq=12
+[Consumer] NORMAL_PRIO #3: data=13000, seq=13
+[Consumer] LOW_PRIO #3: data=140000, seq=14
+[Consumer] CRITICAL #3: data=15, seq=15
+[Consumer] HIGH_PRIO #4: data=160, seq=16
+[Consumer] MERGEABLE #4: data=1700, seq=17
+[Consumer] NORMAL_PRIO #4: data=18000, seq=18
+[Consumer] LOW_PRIO #4: data=190000, seq=19
+
+=== Disp] CRITICAL #4: data=20, seq=2[Consumer Stats] Total: 20, High: 4, Nor[Consumer Stats] Total: 20, High: 4, Normal: 4, Low: 4, Mergeable: 4, Critical: 4
+[System] Producer sequence: 20, Load level: 1
+[Controller] Current strategy: 0, Auto-switch: ON
+=====================================
+
+[Consumer] HIGH_PRIO #5: data=210, seq=21
+[Consumer] MERGEABLE #5: data=2200, seq=22
+[Consumer] NORMAL_PRIO #5: data=23000, seq=23
+[Consumer] LOW_PRIO #5: data=240000, seq=24
+[Consumer] CRITICAL #5: data=25, seq=25
+[Consumer] HIGH_PRIO #6: data=260, seq=26
+[Consumer] MERGEABLE #6: data=2700, seq=27
+[Consumer] NORMAL_PRIO #6: data=28000, seq=28
+[Consumer] LOW_PRIO #6: data=290000, seq=29
+[Controller] Switching to HIGH_PERFORMAN[Controller] Switching to HIGH_PERFORMANCE strategy
+[Consumer] HIGH_PRIO #7: data=310, seq=31
+[Consumer] MERGEABLE #7: data=3200, seq=32
+[Consumer] NORMAL_PRIO #7: data=33000, seq=33
+[Consumer] LOW_PRIO #7: data=340000, seq=34
+[Consumer] CRITICAL #7: data=35, seq=35
+[Consumer] HIGH_PRIO #8: data=360, seq=36
+[Consumer] MERGEABLE #8: data=3700, seq=37
+[Consumer] NORMAL_PRIO #8: data=38000, seq=38
+[Consumer] LOW_PRIO #8: data=390000, seq=39
+
+=== Dispatcher Metrics Reta=40, seq=4[Con[Csumonser Stauts] Total: 40, High: 8, Normer Stats] Total: 40, High: 8, Normal: 8, Low: 8, Mergeable: 8, Critical: 8
+[System] Producer sequence: 40, Load level: 1
+[Controller] Current strategy: 1, Auto-switch: ON
+=====================================
+
+[Consumer] HIGH_PRIO #9: data=410, seq=41
+[Consumer] MERGEABLE #9: data=4200, seq=42
+[Consumer] NORMAL_PRIO #9: data=43000, seq=43
+[Consumer] LOW_PRIO #9: data=440000, seq=44
+[Consumer] CRITICAL #9: data=45, seq=45
+[Consumer] HIGH_PRIO #10: data=460, seq=46
+[Consumer] MERGEABLE #10: data=4700, seq=47
+[Consumer] NORMAL_PRIO #10: data=48000, seq=48
+[Consumer] LOW_PRIO #10: data=490000, seq=49
+[Consumer] CRITICAL #10: data=50, seq=50
+[Consumer] HIGH_PRIO #11: data=510, seq=51
+[Consumer] MERGEABLE #11: data=5200, seq=52
+[Consumer] NORMAL_PRIO #11: data=53000, seq=53
+[Consumer] LOW_PRIO #11: data=540000, seq=54
+[Consumer] CRITICAL #11: data=55, seq=55
+[Consumer] HIGH_PRIO #12: data=560, seq=56
+[Consumer] MERGEABLE #12: data=5700, seq=57
+[Consumer] NORMAL_PRIO #12: data=58000, seq=58
+[Consumer] LOW_PRIO #12: data=590000, seq=59
+[Co[Cntroller] Switching to LOW_LATENCY strategy
+ontroller] Switching to LOW_LATENCY [Consumer Stats] Total: 59, High: 12, Normal: 12, Low: 12, Mergeable: 12, Critical: 11
+[System] Producer sequence: 59, Load level: 1
+[Controller] Current strategy: 2, Auto-switch: ON
+=====================================
+
+[Consumer] CRITICAL #12: data=60, seq=60
+[Consumer] HIGH_PRIO #13: data=610, seq=61
+[Consumer] MERGEABLE #13: data=6200, seq=62
+[Consumer] NORMAL_PRIO #13: data=63000, seq=63
+[Consumer] LOW_PRIO #13: data=640000, seq=64
+[Consumer] CRITICAL #13: data=65, seq=65
+[Consumer] HIGH_PRIO #14: data=660, seq=66
+[Consumer] MERGEABLE #14: data=6700, seq=67
+[Consumer] NORMAL_PRIO #14: data=68000, seq=68
+[Consumer] LOW_PRIO #14: data=690000, seq=69
+[Consumer] CRITICAL #14: data=70, seq=70
+[Consumer] HIGH_PRIO #15: data=710, seq=71
+[Consumer] MERGEABLE #15: data=7200, seq=72
+[Consumer] NORMAL_PRIO #15: data=73000, seq=73
+[Consumer] LOW_PRIO #15: data=740000, seq=74
 ```
-- **Cause**: Event size mismatch between requested event and available pool
-- **Solution**: Verify event pool configuration matches event struct sizes
-- **Check**: `sizeof(WorkerWorkEvt) = 16 bytes` requires 16-byte pool, not 8-byte pool
 
-**2. Missing Worker AO Logs**
-```
-[WorkerAO_idle] WORKER_WORK_SIG - Received work ID xxx
-[WorkerAO_working] WORKER_WORK_SIG - Additional work ID xxx
-```
-- **Cause**: WorkerWorkEvt allocation failure prevents event delivery
-- **Solution**: Ensure worker16Pool is properly initialized for 16-byte events
-
-**3. Event Pool Exhaustion**
-- **Symptoms**: Intermittent failures during high event load
-- **Solution**: Increase pool sizes or optimize event lifecycle
-- **Monitor**: Check pool usage during peak operation
-
-### Error Handling
-- **Graceful Degradation**: Components continue operation even if some fail
-- **Error Reporting**: System errors are logged and reported via health monitoring
-- **Recovery Mechanisms**: Automatic recovery for transient failures
-
-### Performance Considerations
-- **Priority Design**: QActive components have higher priority than RT-Thread threads
-- **Event-Driven**: Efficient event-driven architecture minimizes CPU usage
-- **Synchronization**: Minimal blocking through careful synchronization design
-
-## Integration Benefits
-
-### For QPC Users
-- **Native RT-Thread Integration**: Seamless integration with existing RT-Thread applications
-- **Rich Ecosystem**: Access to RT-Thread's extensive package ecosystem
-- **Standard Tools**: Use familiar RT-Thread tools for debugging and development
-
-### For RT-Thread Users
-- **Event-Driven Architecture**: Benefit from QPC's proven event-driven framework
-- **Hierarchical State Machines**: Use QPC's powerful state machine capabilities
-- **Real-Time Guarantees**: Leverage QPC's deterministic behavior for critical tasks
-
-### Combined Benefits
-- **Best of Both Worlds**: Combine QPC's real-time capabilities with RT-Thread's ecosystem
-- **Practical Integration**: Real-world patterns for industrial applications
-- **Scalable Design**: Architecture scales from simple demos to complex systems
