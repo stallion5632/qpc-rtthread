@@ -32,13 +32,9 @@ if GetDepend(['QPC_USING_QXK']):
 if GetDepend(['QPC_USING_BLINKY_EXAMPLE']):
     src += Glob('examples/rt-thread/blinky/blinky.c')
 
-# Add QXK demo if enabled
-if GetDepend(['QPC_USING_QXK_DEMO']):
-    src += Glob('examples/rt-thread/qxk_demo/*.c')
 
-# Add performance tests if enabled
-if GetDepend(['QPC_USING_PERFORMANCE_TESTS']):
-    src += Glob('apps/performance_tests/*.c')
+src += Glob('examples/rt-thread/qactive_demo/*.c')
+
 
 path = [cwd + "/ports/rt-thread", cwd + "/include", cwd + "/src", cwd + "/apps/performance_tests", cwd + "/examples/rt-thread/qxk_demo"]
 
