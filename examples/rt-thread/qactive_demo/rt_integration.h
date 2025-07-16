@@ -30,6 +30,7 @@
 #define RT_INTEGRATION_H_
 
 #include <rtthread.h>
+#include <stdint.h>
 #include "qactive_demo.h"
 
 /*==========================================================================*/

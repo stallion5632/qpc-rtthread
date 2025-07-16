@@ -3,6 +3,13 @@
 
 #include "qpc.h"
 #include <rtthread.h>
+#include <stdint.h>
+
+/* Proxy queue configuration */
+#define CONFIG_PROXY_QUEUE_SIZE    8U    /* Config proxy queue depth */
+#define STORAGE_PROXY_QUEUE_SIZE   8U    /* Storage proxy queue depth */
+#define CONFIG_REQ_MSG_SIZE        sizeof(ConfigReqEvt*)  /* Config request message size */
+#define STORAGE_REQ_MSG_SIZE       sizeof(StoreReqEvt*)   /* Storage request message size */
 
 /* Config proxy signals */
 enum ConfigProxySignals {
@@ -38,7 +45,7 @@ typedef struct {
 /* Storage confirmation event */
 typedef struct {
     QEvt super;
-    int result;
+    int32_t result;
     void *requester;
 } StoreCfmEvt;
 
@@ -49,5 +56,6 @@ void storage_init(void);
 /* Post request to proxy threads */
 void post_config_request(uint32_t key, uint8_t *buf, QActive *sender);
 void post_storage_request(uint8_t *data, uint32_t len, QActive *requester);
+
 
 #endif /* CONFIG_PROXY_H_ */

@@ -26,11 +26,13 @@
 * <www.state-machine.com/licensing>
 * <info@state-machine.com>
 ============================================================================*/
+
 #include "rt_integration.h"
 #include "config_proxy.h"
 #include <finsh.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #ifdef QPC_USING_QACTIVE_DEMO
 
@@ -45,9 +47,9 @@ static rt_event_t g_system_event = RT_NULL;  /* Only for system threads */
 /* Shared Data Structures - Event-driven access only */
 /*==========================================================================*/
 SharedConfig g_shared_config = {
-    .sensor_rate = 200,       /* Default 2 second intervals */
-    .storage_interval = 1000, /* Default 10 second intervals */
-    .system_flags = 0
+    .sensor_rate = 200U,       /* Default 2 second intervals */
+    .storage_interval = 1000U, /* Default 10 second intervals */
+    .system_flags = 0U
 };
 
 SystemStats g_system_stats = {0};

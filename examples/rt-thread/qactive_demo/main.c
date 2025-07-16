@@ -581,8 +581,8 @@ static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e) {
 ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(QEvt) basicEventPool[50];              /* 4-byte event pool for QEvt only */
 ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(SensorDataEvt) shared8Pool[60];        /* 8-byte event pool for SensorDataEvt, ProcessorResultEvt */
 ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(WorkerWorkEvt) worker16Pool[40];       /* 16-byte event pool for WorkerWorkEvt */
-ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(ConfigReqEvt) config64Pool[20];        /* 64-byte event pool for Config events */
-ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(StoreReqEvt) store256Pool[10];         /* 256-byte event pool for Storage events */
+ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(ConfigReqEvt) config64Pool[30];        /* 64-byte event pool: increased for concurrent config requests */
+ALIGN(RT_ALIGN_SIZE) static QF_MPOOL_EL(StoreReqEvt) store256Pool[20];         /* 256-byte event pool: increased for concurrent storage requests */
 
 /*==========================================================================*/
 /* QActive Demo Initialization (Enhanced from lite version) */
