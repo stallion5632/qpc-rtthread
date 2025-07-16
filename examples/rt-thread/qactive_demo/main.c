@@ -143,7 +143,7 @@ static void SensorAO_ctor(void) {
 static QState SensorAO_initial(SensorAO * const me, QEvt const * const e) {
     (void)e;
 
-    rt_kprintf("[SensorAO_initial] Initializing Sensor AO - Thread: %s\n", 
+    rt_kprintf("[SensorAO_initial] Initializing Sensor AO - Thread: %s\n",
                rt_thread_self() ? rt_thread_self()->name : "ISR");
 
     /* Subscribe to sensor signals */
@@ -181,7 +181,7 @@ static QState SensorAO_active(SensorAO * const me, QEvt const * const e) {
             me->sensor_count++;
             uint32_t sensor_data = me->sensor_count * 10 + (rt_tick_get() & 0xFF);
 
-            rt_kprintf("[SensorAO_active] TIMEOUT - Reading #%u, data = %u (tick=%u)\n", 
+            rt_kprintf("[SensorAO_active] TIMEOUT - Reading #%u, data = %u (tick=%u)\n",
                       me->sensor_count, sensor_data, (uint32_t)rt_tick_get());
 
             /* Send data to processor (using lite version event structure) */
@@ -190,14 +190,9 @@ static QState SensorAO_active(SensorAO * const me, QEvt const * const e) {
             rt_kprintf("[SensorAO_active] Posting sensor data to Processor AO\n");
             QACTIVE_POST(AO_Processor, &evt->super, me);
 
-            /* Update RT-Thread integration statistics */
-            if (g_config_mutex != RT_NULL) {
-                rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-                g_system_stats.sensor_readings++;
-                rt_mutex_release(g_config_mutex);
-                rt_kprintf("[SensorAO_active] Updated sensor readings count: %u\n", 
-                          g_system_stats.sensor_readings);
-            }
+            /* Update statistics (事件驱动，无需 RT-Thread IPC) */
+            g_system_stats.sensor_readings++;
+            rt_kprintf("[SensorAO_active] Updated sensor readings count: %u\n", g_system_stats.sensor_readings);
 
             status = Q_HANDLED();
             break;
@@ -234,7 +229,7 @@ static void ProcessorAO_ctor(void) {
 static QState ProcessorAO_initial(ProcessorAO * const me, QEvt const * const e) {
     (void)e;
 
-    rt_kprintf("[ProcessorAO_initial] Initializing Processor AO - Thread: %s\n", 
+    rt_kprintf("[ProcessorAO_initial] Initializing Processor AO - Thread: %s\n",
                rt_thread_self() ? rt_thread_self()->name : "ISR");
 
     /* Subscribe to processor signals */
@@ -263,10 +258,10 @@ static QState ProcessorAO_idle(ProcessorAO * const me, QEvt const * const e) {
         case SENSOR_DATA_SIG: {
             SensorDataEvt const *evt = (SensorDataEvt const *)e;
             rt_kprintf("[ProcessorAO_idle] SENSOR_DATA_SIG - Received sensor data = %u\n", evt->data);
-            
+
             /* Store data for processing state */
             me->processed_count++;
-            
+
             status = Q_TRAN(&ProcessorAO_processing);
             break;
         }
@@ -331,14 +326,9 @@ static QState ProcessorAO_processing(ProcessorAO * const me, QEvt const * const 
                 rt_kprintf("[ProcessorAO_processing] ERROR: Failed to allocate second WorkerWorkEvt!\n");
             }
 
-            /* Update RT-Thread integration statistics */
-            if (g_config_mutex != RT_NULL) {
-                rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-                g_system_stats.processed_data++;
-                rt_mutex_release(g_config_mutex);
-                rt_kprintf("[ProcessorAO_processing] Updated processed data count: %u\n", 
-                          g_system_stats.processed_data);
-            }
+            /* Update statistics (事件驱动，无需 RT-Thread IPC) */
+            g_system_stats.processed_data++;
+            rt_kprintf("[ProcessorAO_processing] Updated processed data count: %u\n", g_system_stats.processed_data);
 
             status = Q_TRAN(&ProcessorAO_idle);
             break;
@@ -377,7 +367,7 @@ static void WorkerAO_ctor(void) {
 static QState WorkerAO_initial(WorkerAO * const me, QEvt const * const e) {
     (void)e;
 
-    rt_kprintf("[WorkerAO_initial] Initializing Worker AO - Thread: %s\n", 
+    rt_kprintf("[WorkerAO_initial] Initializing Worker AO - Thread: %s\n",
                rt_thread_self() ? rt_thread_self()->name : "ISR");
 
     /* Subscribe to worker signals */
@@ -404,7 +394,7 @@ static QState WorkerAO_idle(WorkerAO * const me, QEvt const * const e) {
 
         case WORKER_WORK_SIG: {
             WorkerWorkEvt const *evt = (WorkerWorkEvt const *)e;
-            rt_kprintf("[WorkerAO_idle] WORKER_WORK_SIG - Received work ID %u (size=%u, prio=%u)\n", 
+            rt_kprintf("[WorkerAO_idle] WORKER_WORK_SIG - Received work ID %u (size=%u, prio=%u)\n",
                       evt->work_id, evt->data_size, evt->priority);
             status = Q_TRAN(&WorkerAO_working);
             break;
@@ -444,12 +434,9 @@ static QState WorkerAO_working(WorkerAO * const me, QEvt const * const e) {
 
         case WORKER_TIMEOUT_SIG: {
             rt_kprintf("[WorkerAO_working] WORKER_TIMEOUT_SIG - Work completed\n");
-            
-            /* Signal storage thread for RT-Thread integration */
-            if (g_storage_sem != RT_NULL) {
-                rt_sem_release(g_storage_sem);
-                rt_kprintf("[WorkerAO_working] Released storage semaphore for RT-Thread integration\n");
-            }
+
+            /* 事件驱动存储，无需 RT-Thread IPC */
+            // 可在此处发送 StoreReqEvt 事件给 storage_proxy
 
             status = Q_TRAN(&WorkerAO_idle);
             break;
@@ -487,7 +474,7 @@ static void MonitorAO_ctor(void) {
 static QState MonitorAO_initial(MonitorAO * const me, QEvt const * const e) {
     (void)e;
 
-    rt_kprintf("[MonitorAO_initial] Initializing Monitor AO - Thread: %s\n", 
+    rt_kprintf("[MonitorAO_initial] Initializing Monitor AO - Thread: %s\n",
                rt_thread_self() ? rt_thread_self()->name : "ISR");
 
     /* Subscribe to monitor signals */
@@ -530,14 +517,9 @@ static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e) {
             rt_kprintf("[MonitorAO_monitoring] Posting self-check signal\n");
             QACTIVE_POST(&me->super, Q_NEW(QEvt, MONITOR_CHECK_SIG), me);
 
-            /* Update RT-Thread integration statistics */
-            if (g_config_mutex != RT_NULL) {
-                rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-                g_system_stats.health_checks++;
-                rt_mutex_release(g_config_mutex);
-                rt_kprintf("[MonitorAO_monitoring] Updated health checks count: %u\n", 
-                          g_system_stats.health_checks);
-            }
+            /* Update statistics (事件驱动，无需 RT-Thread IPC) */
+            g_system_stats.health_checks++;
+            rt_kprintf("[MonitorAO_monitoring] Updated health checks count: %u\n", g_system_stats.health_checks);
 
             status = Q_HANDLED();
             break;
@@ -582,7 +564,7 @@ void QActiveDemo_init(void) {
     /* Initialize QF framework */
     QF_init();
     rt_kprintf("[QActiveDemo_init] QF framework initialized\n");
-    
+
     /* Initialize publish-subscribe system */
     QF_psInit(subscrSto, Q_DIM(subscrSto));
     rt_kprintf("[QActiveDemo_init] Publish-subscribe system initialized\n");
@@ -640,12 +622,12 @@ int qactive_demo_start(void) {
     ALIGN(RT_ALIGN_SIZE) static uint8_t monitorStack[MONITOR_STACK_SIZE];
 
     rt_kprintf("[qactive_demo_start] Starting QActive Demo with enhanced RT-Thread integration...\n");
-    
+
     /* Initialize the demo (if not already done) */
     QActiveDemo_init();
 
     rt_kprintf("[qactive_demo_start] Starting 4 QActive objects with RT-Thread scheduling...\n");
-    
+
     /* Start active objects with RT-Thread integration */
     QACTIVE_START(AO_Sensor,
                   SENSOR_PRIO, /* Priority */
@@ -654,7 +636,7 @@ int qactive_demo_start(void) {
                   (void *)0);
     /* Set thread name for RT-Thread integration */
     QActive_setAttr(AO_Sensor, THREAD_NAME_ATTR, "sensor_ao");
-    rt_kprintf("[qactive_demo_start] Sensor AO started (prio=%u, thread=%s)\n", 
+    rt_kprintf("[qactive_demo_start] Sensor AO started (prio=%u, thread=%s)\n",
                SENSOR_PRIO, AO_Sensor->thread.name ? AO_Sensor->thread.name : "NULL");
 
     QACTIVE_START(AO_Processor,
@@ -663,7 +645,7 @@ int qactive_demo_start(void) {
                   processorStack, sizeof(processorStack),
                   (void *)0);
     QActive_setAttr(AO_Processor, THREAD_NAME_ATTR, "processor_ao");
-    rt_kprintf("[qactive_demo_start] Processor AO started (prio=%u, thread=%s)\n", 
+    rt_kprintf("[qactive_demo_start] Processor AO started (prio=%u, thread=%s)\n",
                PROCESSOR_PRIO, AO_Processor->thread.name ? AO_Processor->thread.name : "NULL");
 
     QACTIVE_START(AO_Worker,
@@ -672,7 +654,7 @@ int qactive_demo_start(void) {
                   workerStack, sizeof(workerStack),
                   (void *)0);
     QActive_setAttr(AO_Worker, THREAD_NAME_ATTR, "worker_ao");
-    rt_kprintf("[qactive_demo_start] Worker AO started (prio=%u, thread=%s)\n", 
+    rt_kprintf("[qactive_demo_start] Worker AO started (prio=%u, thread=%s)\n",
                WORKER_PRIO, AO_Worker->thread.name ? AO_Worker->thread.name : "NULL");
 
     QACTIVE_START(AO_Monitor,
@@ -681,7 +663,7 @@ int qactive_demo_start(void) {
                   monitorStack, sizeof(monitorStack),
                   (void *)0);
     QActive_setAttr(AO_Monitor, THREAD_NAME_ATTR, "monitor_ao");
-    rt_kprintf("[qactive_demo_start] Monitor AO started (prio=%u, thread=%s)\n", 
+    rt_kprintf("[qactive_demo_start] Monitor AO started (prio=%u, thread=%s)\n",
                MONITOR_PRIO, AO_Monitor->thread.name ? AO_Monitor->thread.name : "NULL");
 
     /* Start RT-Thread integration components */
@@ -749,7 +731,7 @@ int main(void)
     int ret = qactive_demo_start();
     rt_kprintf("[main] System startup completed, QF_run() returned: %d\n", ret);
     rt_kprintf("[main] Type 'qactive_control start' for manual control\n");
-    
+
     return ret;
 }
 

@@ -77,12 +77,9 @@ typedef struct {
 } SystemHealthEvt;
 
 /*==========================================================================*/
-/* RT-Thread Synchronization Objects */
+/* RT-Thread Synchronization Objects (已废弃，全部由 proxy 线程代理) */
 /*==========================================================================*/
-/* Global synchronization objects for Xxx */
-extern rt_mutex_t g_config_mutex;      /* Mutex for shared configuration */
-extern rt_sem_t g_storage_sem;         /* Semaphore for storage coordination */
-extern rt_event_t g_system_event;      /* Event set for system notifications */
+// 所有 AO 不再直接依赖 RT-Thread IPC 对象，相关同步由 config_proxy/storage_proxy 线程实现。
 
 /*==========================================================================*/
 /* Shared Data Structures */
