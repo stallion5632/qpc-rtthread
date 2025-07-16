@@ -77,17 +77,9 @@ typedef struct {
 } SystemHealthEvt;
 
 /*==========================================================================*/
-/* RT-Thread Synchronization Objects */
+/* Shared Data Structures - Event-driven only, no IPC objects */
 /*==========================================================================*/
-/* Global synchronization objects for Xxx */
-extern rt_mutex_t g_config_mutex;      /* Mutex for shared configuration */
-extern rt_sem_t g_storage_sem;         /* Semaphore for storage coordination */
-extern rt_event_t g_system_event;      /* Event set for system notifications */
-
-/*==========================================================================*/
-/* Shared Data Structures */
-/*==========================================================================*/
-/* Configuration data protected by mutex */
+/* Configuration data - accessed only through events */
 typedef struct {
     uint32_t sensor_rate;
     uint32_t storage_interval;
@@ -95,7 +87,6 @@ typedef struct {
 } SharedConfig;
 
 extern SharedConfig g_shared_config;
-
 
 typedef struct {
     uint32_t sensor_readings;
@@ -130,7 +121,7 @@ int rt_integration_start(void);
 /* Stop RT-Thread components */
 int rt_integration_stop(void);
 
-/* Get system statistics */
+/* Get system statistics - event-driven access */
 void rt_integration_get_stats(SystemStats *stats);
 
 /*==========================================================================*/

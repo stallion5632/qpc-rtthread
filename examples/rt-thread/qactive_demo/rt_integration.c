@@ -27,6 +27,7 @@
 * <info@state-machine.com>
 ============================================================================*/
 #include "rt_integration.h"
+#include "config_proxy.h"
 #include <finsh.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,14 +35,14 @@
 #ifdef QPC_USING_QACTIVE_DEMO
 
 /*==========================================================================*/
-/* Global RT-Thread Synchronization Objects */
+/* Global RT-Thread Synchronization Objects - For system threads only */
 /*==========================================================================*/
-rt_mutex_t g_config_mutex = RT_NULL;
-rt_sem_t g_storage_sem = RT_NULL;
-rt_event_t g_system_event = RT_NULL;
+static rt_mutex_t g_system_mutex = RT_NULL;  /* Only for system threads */
+static rt_sem_t g_storage_sem = RT_NULL;     /* Only for storage thread */
+static rt_event_t g_system_event = RT_NULL;  /* Only for system threads */
 
 /*==========================================================================*/
-/* Shared Data Structures */
+/* Shared Data Structures - Event-driven access only */
 /*==========================================================================*/
 SharedConfig g_shared_config = {
     .sensor_rate = 200,       /* Default 2 second intervals */
@@ -58,7 +59,7 @@ rt_thread_t storage_thread = RT_NULL;
 rt_thread_t shell_thread = RT_NULL;
 
 /*==========================================================================*/
-/* Storage Thread Implementation */
+/* Storage Thread Implementation - Independent of AO context */
 /*==========================================================================*/
 void storage_thread_entry(void *parameter) {
     rt_uint32_t events;
@@ -69,7 +70,9 @@ void storage_thread_entry(void *parameter) {
     rt_kprintf("Storage: Thread started - Managing local data storage\n");
 
     /* Signal that storage is ready */
-    rt_event_send(g_system_event, RT_EVENT_STORAGE_READY);
+    if (g_system_event != RT_NULL) {
+        rt_event_send(g_system_event, RT_EVENT_STORAGE_READY);
+    }
 
     /* Main storage loop */
     while (1) {
@@ -85,26 +88,34 @@ void storage_thread_entry(void *parameter) {
         /* Simulate file system operations */
         rt_thread_mdelay(30);
 
-        /* Update statistics */
-        rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-        g_system_stats.storage_saves++;
-        rt_mutex_release(g_config_mutex);
+        /* Update statistics - no AO involvement */
+        if (g_system_mutex != RT_NULL) {
+            rt_mutex_take(g_system_mutex, RT_WAITING_FOREVER);
+            g_system_stats.storage_saves++;
+            rt_mutex_release(g_system_mutex);
+        }
 
         rt_kprintf("Storage: Save completed (total: %u)\n",
                   g_system_stats.storage_saves);
 
         /* Send health update to system */
-        rt_event_send(g_system_event, RT_EVENT_HEALTH_CHECK);
+        if (g_system_event != RT_NULL) {
+            rt_event_send(g_system_event, RT_EVENT_HEALTH_CHECK);
+        }
 
         /* Check for system events */
-        if (rt_event_recv(g_system_event, RT_EVENT_SYSTEM_ERROR,
-                         RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
-                         0, &events) == RT_EOK) {
-            rt_kprintf("Storage: System error detected, initiating recovery\n");
+        if (g_system_event != RT_NULL) {
+            if (rt_event_recv(g_system_event, RT_EVENT_SYSTEM_ERROR,
+                             RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
+                             0, &events) == RT_EOK) {
+                rt_kprintf("Storage: System error detected, initiating recovery\n");
 
-            rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-            g_system_stats.errors++;
-            rt_mutex_release(g_config_mutex);
+                if (g_system_mutex != RT_NULL) {
+                    rt_mutex_take(g_system_mutex, RT_WAITING_FOREVER);
+                    g_system_stats.errors++;
+                    rt_mutex_release(g_system_mutex);
+                }
+            }
         }
 
         /* Small delay to prevent busy waiting */
@@ -113,7 +124,7 @@ void storage_thread_entry(void *parameter) {
 }
 
 /*==========================================================================*/
-/* Shell Thread Implementation */
+/* Shell Thread Implementation - Independent of AO context */
 /*==========================================================================*/
 void shell_thread_entry(void *parameter) {
     (void)parameter;
@@ -121,7 +132,9 @@ void shell_thread_entry(void *parameter) {
     rt_kprintf("Shell: Thread started - RT-Thread MSH commands available\n");
 
     /* Signal that shell is ready */
-    rt_event_send(g_system_event, RT_EVENT_SHELL_READY);
+    if (g_system_event != RT_NULL) {
+        rt_event_send(g_system_event, RT_EVENT_SHELL_READY);
+    }
 
     /* Shell thread mainly handles command processing */
     /* The actual commands are handled by MSH exports */
@@ -129,14 +142,16 @@ void shell_thread_entry(void *parameter) {
         /* Monitor system events and provide shell feedback */
         rt_uint32_t events;
 
-        if (rt_event_recv(g_system_event,
-                         RT_EVENT_STORAGE_READY |
-                         RT_EVENT_QACTIVE_READY | RT_EVENT_HEALTH_CHECK,
-                         RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
-                         1000, &events) == RT_EOK) {
+        if (g_system_event != RT_NULL) {
+            if (rt_event_recv(g_system_event,
+                             RT_EVENT_STORAGE_READY |
+                             RT_EVENT_QACTIVE_READY | RT_EVENT_HEALTH_CHECK,
+                             RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
+                             1000, &events) == RT_EOK) {
 
-            if (events & RT_EVENT_HEALTH_CHECK) {
-                rt_kprintf("Shell: System health check completed\n");
+                if (events & RT_EVENT_HEALTH_CHECK) {
+                    rt_kprintf("Shell: System health check completed\n");
+                }
             }
         }
 
@@ -151,26 +166,30 @@ void shell_thread_entry(void *parameter) {
 int rt_integration_init(void) {
     rt_kprintf("RT-Integration: Initializing RT-Thread components\n");
 
-    /* Create mutex for shared configuration */
-    g_config_mutex = rt_mutex_create("cfg_mutex", RT_IPC_FLAG_FIFO);
-    if (g_config_mutex == RT_NULL) {
-        rt_kprintf("RT-Integration: Failed to create configuration mutex\n");
+    /* Create mutex for shared configuration - system threads only */
+    g_system_mutex = rt_mutex_create("sys_mutex", RT_IPC_FLAG_FIFO);
+    if (g_system_mutex == RT_NULL) {
+        rt_kprintf("RT-Integration: Failed to create system mutex\n");
         return -1;
     }
 
-    /* Create semaphore for storage coordination */
+    /* Create semaphore for storage coordination - system threads only */
     g_storage_sem = rt_sem_create("stor_sem", 0, RT_IPC_FLAG_FIFO);
     if (g_storage_sem == RT_NULL) {
         rt_kprintf("RT-Integration: Failed to create storage semaphore\n");
         return -1;
     }
 
-    /* Create event set for system notifications */
+    /* Create event set for system notifications - system threads only */
     g_system_event = rt_event_create("sys_event", RT_IPC_FLAG_FIFO);
     if (g_system_event == RT_NULL) {
         rt_kprintf("RT-Integration: Failed to create system event\n");
         return -1;
     }
+
+    /* Initialize proxy threads */
+    config_init();
+    storage_init();
 
     rt_kprintf("RT-Integration: All synchronization objects created successfully\n");
     return 0;
@@ -190,6 +209,7 @@ int rt_integration_start(void) {
     }
 
     rt_kprintf("RT-Integration: Storage thread started successfully\n");
+
     /* Create and start shell thread */
     shell_thread = rt_thread_create("shell", shell_thread_entry, RT_NULL,
                                    1024, 11, 10);
@@ -215,14 +235,18 @@ int rt_integration_stop(void) {
 
 void rt_integration_get_stats(SystemStats *stats) {
     if (stats != RT_NULL) {
-        rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-        *stats = g_system_stats;
-        rt_mutex_release(g_config_mutex);
+        if (g_system_mutex != RT_NULL) {
+            rt_mutex_take(g_system_mutex, RT_WAITING_FOREVER);
+            *stats = g_system_stats;
+            rt_mutex_release(g_system_mutex);
+        } else {
+            *stats = g_system_stats;  /* Fallback if mutex not available */
+        }
     }
 }
 
 /*==========================================================================*/
-/* MSH Command Implementations */
+/* MSH Command Implementations - Using event-driven approach */
 /*==========================================================================*/
 int qactive_start_cmd(int argc, char** argv) {
     (void)argc;
@@ -231,10 +255,10 @@ int qactive_start_cmd(int argc, char** argv) {
     rt_kprintf("QActive: Starting QActive components\n");
 
     /* Send start signal to sensor */
-    QACTIVE_POST(AO_Sensor, Q_NEW(QEvt, SENSOR_READ_SIG), shell_thread);
+    QACTIVE_POST(AO_Sensor, Q_NEW(QEvt, SENSOR_READ_SIG), 0U);
 
     /* Send start signal to processor */
-    QACTIVE_POST(AO_Processor, Q_NEW(QEvt, PROCESSOR_START_SIG), shell_thread);
+    QACTIVE_POST(AO_Processor, Q_NEW(QEvt, PROCESSOR_START_SIG), 0U);
 
     rt_kprintf("QActive: Start commands sent to QActive components\n");
     return 0;
@@ -257,7 +281,7 @@ int qactive_stats_cmd(int argc, char** argv) {
 
     SystemStats stats;
     rt_integration_get_stats(&stats);
-    /* need lock here*/
+
     rt_kprintf("=== QActive Demo System Statistics ===\n");
     rt_kprintf("Sensor Readings:       %u\n", stats.sensor_readings);
     rt_kprintf("Processed Data:        %u\n", stats.processed_data);
@@ -278,7 +302,9 @@ int qactive_config_cmd(int argc, char** argv) {
         return 0;
     }
 
-    rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
+    if (g_system_mutex != RT_NULL) {
+        rt_mutex_take(g_system_mutex, RT_WAITING_FOREVER);
+    }
 
     if (argc >= 3) {
         g_shared_config.sensor_rate = atoi(argv[2]);
@@ -290,10 +316,14 @@ int qactive_config_cmd(int argc, char** argv) {
         g_shared_config.system_flags = atoi(argv[4]);
     }
 
-    rt_mutex_release(g_config_mutex);
+    if (g_system_mutex != RT_NULL) {
+        rt_mutex_release(g_system_mutex);
+    }
 
     /* Signal configuration update */
-    rt_event_send(g_system_event, RT_EVENT_CONFIG_UPDATED);
+    if (g_system_event != RT_NULL) {
+        rt_event_send(g_system_event, RT_EVENT_CONFIG_UPDATED);
+    }
 
     rt_kprintf("QActive: Configuration updated - sensor=%u, storage=%u, flags=%u\n",
               g_shared_config.sensor_rate,
@@ -326,9 +356,13 @@ int system_reset_cmd(int argc, char** argv) {
 
     rt_kprintf("System: Resetting statistics\n");
 
-    rt_mutex_take(g_config_mutex, RT_WAITING_FOREVER);
-    rt_memset(&g_system_stats, 0, sizeof(SystemStats));
-    rt_mutex_release(g_config_mutex);
+    if (g_system_mutex != RT_NULL) {
+        rt_mutex_take(g_system_mutex, RT_WAITING_FOREVER);
+        rt_memset(&g_system_stats, 0, sizeof(SystemStats));
+        rt_mutex_release(g_system_mutex);
+    } else {
+        rt_memset(&g_system_stats, 0, sizeof(SystemStats));
+    }
 
     rt_kprintf("System: Statistics reset completed\n");
     return 0;
