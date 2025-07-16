@@ -13,7 +13,7 @@ void read_config(uint32_t key, uint8_t *buf);
 #define CFG_MQ_NAME      "cfgMq"
 #define CFG_SEND_TIMEOUT_MS  50  /* Short timeout for send operation */
 
-/* mailbox for config requests */
+/* message queue for config requests */
 static rt_mq_t config_mq;
 
 static void config_thread(void *arg) {

@@ -1,6 +1,6 @@
 # QActive Demo for RT-Thread
 
-本工程演示了 QPC 框架在 RT-Thread 实时操作系统上的集成与应用。通过 4 个 QActive 活动对象，实现了一个传感器数据采集、处理、后台工作和系统监控的完整事件驱动系统。
+本工程通过 4 个 QActive 活动对象，实现了一个传感器数据采集、处理、后台工作和系统监控的事件驱动示例。
 
 ## 工程功能说明
 
@@ -8,7 +8,6 @@
 - **事件池设计**：所有 8 字节事件（SensorDataEvt、ProcessorResultEvt、WorkerWorkEvt）共用一个事件池，节省内存并提升效率。
 - **活动对象架构**：包括传感器、处理器、工作者、监控器 4 个 QActive 对象，分别负责数据采集、处理、后台任务和健康监控。
 - **时序驱动**：各对象通过 QTimeEvt 实现周期性行为。
-- **日志输出**：详细输出各阶段初始化和运行状态，便于调试和理解系统流程。
 
 ## 启动与运行日志示例
 
@@ -76,7 +75,7 @@ sequenceDiagram
 - **所有 8 字节事件结构体统一复用 shared8Pool，节省资源。**
 - **每个 QActive 对象实现独立状态机，周期性行为由 QTimeEvt 驱动。**
 - **初始化流程防止重复注册，避免 RT-Thread 对象断言失败。**
-- **所有静态内存分配均加 ALIGN(RT_ALIGN_SIZE)，保证平台兼容性。**
+- **所有静态内存分配均加 ALIGN(RT_ALIGN_SIZE)性。**
 
 ## QActive对象调度机制
 - QPC 框架中的 QActive 对象（如 Sensor、Processor、Worker、Monitor）是通过 QF 框架的**事件驱动调度机制**进行管理的：
@@ -97,31 +96,13 @@ sequenceDiagram
 - **后台线程/定时器**
    周期性行为通过 QTimeEvt 定时事件实现，不会阻塞主调度循环。
 
-### 如果 QActive 线程有阻塞行为会怎样？
+### QActive 线程阻塞相关注意事项总结
 
-- **影响调度效率**
-  如果某个 QActive 的事件处理函数里有阻塞（如延时、等待某资源），会导致整个 QF 框架调度停滞，其他 QActive 也无法及时处理事件，严重影响系统实时性。
-- **设计原则**
-  QPC 要求所有 QActive 的事件处理函数必须是非阻塞的。长时间操作应拆分为多个事件，或用定时器/异步机制实现。
+1. **rt_thread_mdelay、rt_sem_take 等阻塞只影响自身，不会卡死全局**
+   - 某个 QActive 的事件处理函数如果阻塞（如rt_thread_mdelay、rt_sem_take），只会导致该 AO 线程无法及时处理新事件，极端情况下可能导致其事件队列溢出。其他 QActive 线程不受直接影响。
 
-## 工程文件说明
+2. **推荐用 QTimeEvt 实现定时/延迟，避免阻塞**
+   - QTimeEvt（QPC 定时事件）本质是“事件定时投递”，不会让线程阻塞；AO 线程收到定时事件再处理，整个过程异步、非阻塞。
 
-- `main.c`：主程序，包含所有活动对象和事件池实现。
-- `qactive_demo.h`：信号定义及接口声明。
-- `SConscript`：RT-Thread SCons 构建配置。
-- `README.md`：本说明文档。
-
-## 学习要点
-
-- 如何在 RT-Thread 上创建和启动 QActive 对象
-- QF 框架 API 的正确用法（QF_init, QF_run, QACTIVE_START）
-- 活动对象间的事件驱动通信
-- QTimeEvt 的周期性行为实现
-- 状态机设计与 RT-Thread 集成
-- 事件池设计与内存优化
-
-## 参考资料
-
-- [QPC 官方文档](https://www.state-machine.com/qpc)
-- [QF 框架指南](https://www.state-machine.com/qpc/qf.html)
-- [RT-Thread 官方文档](https://www.rt-thread.org/document/site/)
+3. **设计原则：事件处理必须非阻塞**
+   - 建议所有 QActive 的事件处理函数是非阻塞的。长时间操作应拆分为多个事件，或用定时器/异步机制实现。
