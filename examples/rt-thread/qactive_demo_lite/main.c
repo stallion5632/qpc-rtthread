@@ -539,13 +539,11 @@ static int qactive_demo_init(void) {
 }
 INIT_APP_EXPORT(qactive_demo_init);
 
-/* 主函数入口 */
 int main(void)
 {
     QActiveDemo_init();
     rt_kprintf("[System] Starting QF application\n");
 
-    /* 启动 QActive Demo */
     int ret = qactive_demo_start();
     rt_kprintf("[System] System startup completed\n");
     return ret;
