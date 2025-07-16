@@ -10,7 +10,7 @@
 1. AO 事件处理函数（状态机回调）保持 *Run-to-Completion*：处理单个事件期间不主动阻塞自身线程。
 2. 移除 AO 内直接调用 `rt_sem_take()`、`rt_mutex_take()`、`rt_thread_mdelay()` 等阻塞原语。
 3. 所有延时统一使用 **QTimeEvt**；所有需要等待外部资源的场景通过 **代理线程 + 消息队列 + 回传事件** 实现。
-4. 为主要事件类型建立独立事件池；为代理通信建立指针消息队列；不可阻塞 AO。
+4. 为主要事件类型建立独立事件池；为代理通信建立指针消息队列（message queue，rt_mq）；不可阻塞 AO。
 5. 可从日志追踪 AO 启动、事件流、代理处理、确认回传；便于验证功能与资源余量。
 
 ## 2. 系统架构
@@ -30,14 +30,15 @@
 
 阻塞操作集中在代理线程中完成：
 
-| Proxy            | 等待IPC                | 输入事件指针类型 | 外部动作               | 向 AO 回传信号   |
+
+| Proxy            | 等待IPC（消息队列）    | 输入事件指针类型 | 外部动作               | 向 AO 回传信号   |
 | ---------------- | ---------------------- | ---------------- | ---------------------- | ---------------- |
-| **ConfigProxy**  | `config_mq` (指针队列) | `ConfigReqEvt*`  | `read_config()` (阻塞) | `CONFIG_CFM_SIG` |
-| **StorageProxy** | `storage_mq`           | `StoreReqEvt*`   | `flash_write()` (阻塞) | `STORE_CFM_SIG`  |
+| **ConfigProxy**  | `config_mq` (消息队列) | `ConfigReqEvt*`  | `read_config()` (阻塞) | `CONFIG_CFM_SIG` |
+| **StorageProxy** | `storage_mq` (消息队列)| `StoreReqEvt*`   | `flash_write()` (阻塞) | `STORE_CFM_SIG`  |
 
 
 - 队列项类型为 **事件指针**（避免复制大对象）。
-- 发送使用非阻塞 `rt_mq_send`；若返回 `-RT_EFULL`，立即通过事件反馈失败。
+- 发送使用非阻塞 `rt_mq_send`（消息队列）；若返回 `-RT_EFULL`，立即通过事件反馈失败。
 - 代理线程在完成工作后使用 `QACTIVE_POST()` 向请求 AO 发确认事件，并负责回收（`QF_gc()`）原始请求事件。
 
 
@@ -91,7 +92,7 @@
 - **互斥锁（Mutex）**：保护共享配置数据
 - **信号量（Semaphore）**：协调存储操作
 - **事件集（Event Set）**：系统级通知与状态同步
-- **消息队列（Message Queue）**：代理线程间的非阻塞通信
+- **消息队列（Message Queue，rt_mq）**：代理线程间的非阻塞通信
 
 ### 2.7 系统结构图
 
