@@ -1,4 +1,3 @@
-```markdown
 ![QP Framework](doxygen/images/qp_banner.jpg)
 
 # QPC-RTThread 端口（QP/C on RT-Thread）
