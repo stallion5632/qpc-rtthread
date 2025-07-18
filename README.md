@@ -35,8 +35,8 @@ Application Thread → QActive_post_() → RT-Thread Mailbox → Target AO Threa
 
 ### ISR Context Events (Advanced)
 ```
-ISR → QF_postFromISR() → Strategy-based Priority Classification → 
-      Priority Staging Buffer → Dispatcher Thread → 
+ISR → QF_postFromISR() → Strategy-based Priority Classification →
+      Priority Staging Buffer → Dispatcher Thread →
       Event Processing (Merge/Drop/Retry) → RT-Thread Mailbox → Target AO Thread
 ```
 
@@ -148,7 +148,7 @@ qf_help         # Display help information
 
 ```c
 // Create high-priority critical event
-QEvtEx *evt = QF_newEvtEx(CRITICAL_SIG, sizeof(QEvtEx), 255, 
+QEvtEx *evt = QF_newEvtEx(CRITICAL_SIG, sizeof(QEvtEx), 255,
                          QF_EVT_FLAG_CRITICAL | QF_EVT_FLAG_NO_DROP);
 QACTIVE_POST(ao, (QEvt *)evt, 0);
 
@@ -198,6 +198,23 @@ ISR                 Priority Staging    Dispatcher Thread    Target AO Thread
  |                       |                    |                 |
  |                       |                    |                 |--[Process Event]
 ```
+
+## Performance Tests Module
+在 `apps/performance_tests` 目录下包含完整性能测试框架：
+- `include/perf_test.h`    : 测试用例结构与 API 声明
+- `src/perf_test_core.c`   : 调度管理与报告逻辑
+- `src/perf_test_cmd.c`    : FinSH MSH 命令绑定
+- `tests/*.c`              : 示例测试用例（如 cpu_load）
+
+### 构建与使用
+1. 在 SCons 构建时自动编译 `apps/performance_tests`。
+2. 运行设备后，使用 FinSH 终端执行以下命令：
+   ```shell
+   perf list            # 列出所有测试用例
+   perf start cpu_load  # 启动 cpu_load 测试
+   perf report          # 打印测试报告
+   ```
+3. 测试用例通过 `PERF_TEST_REG` 宏注册到 `.perf_tests` 段，链接脚本需保留该段 (`KEEP(.perf_tests)`)。
 
 ## Demo Application
 
