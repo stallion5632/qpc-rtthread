@@ -1,24 +1,18 @@
-import rtconfig
 from building import *
 
 cwd = GetCurrentDir()
 
-# Performance test source files - New Active Object based implementation
-src = Split("""
-app_main.c
-counter_ao.c
-timer_ao.c
-logger_ao.c
-bsp.c
-""")
+# Performance test source files
+src = Glob('src/*.c') + Glob('tests/*.c')
 
 # Include paths
-path = [cwd]
+path = [cwd + '/include']
 
 # Define the performance test group
-# This group depends on QPC, RT-Thread mailbox support, and FINSH for MSH commands
-group = DefineGroup('qpc_perf_tests', src, 
-                   depend = ['PKG_USING_QPC', 'RT_USING_MAILBOX', 'RT_USING_FINSH', 'RT_USING_MUTEX'], 
-                   CPPPATH = path)
+group = DefineGroup('qpc_perf_tests', src,
+    depend=['PKG_USING_QPC', 'RT_USING_MAILBOX', 'RT_USING_FINSH', 'RT_USING_MUTEX'],
+    CPPPATH=path,
+    LOCAL_CPPDEFINES=[]
+)
 
 Return('group')

@@ -5,14 +5,16 @@
 * @file
 * @brief Diagnostic and monitoring utility for QF dispatcher
 */
+
 #include "qf_port.h"
 #include "qf_opt_layer.h"
 #include <finsh.h>
+#include "qpc.h"
 
 /*..........................................................................*/
 static void QF_printMetrics(void) {
     QF_DispatcherMetrics const *metrics = QF_getDispatcherMetrics();
-    
+
     rt_kprintf("\n==== QF Dispatcher Metrics ====\n");
     rt_kprintf("| Metric                 | Value     |\n");
     rt_kprintf("|------------------------|----------|\n");
@@ -34,20 +36,22 @@ static void QF_printMetrics(void) {
     rt_kprintf("==================================\n");
 }
 
+
 /*..........................................................................*/
 static void QF_printAOStatus(void) {
     rt_kprintf("\n==== Active Object Status ====\n");
+#if 0
     rt_kprintf("| AO# | Name           | Queue | Max   | State |\n");
     rt_kprintf("|-----|----------------|-------|-------|-------|\n");
-    
+
     for (uint8_t i = 1; i <= QF_MAX_ACTIVE; ++i) {
         QActive *ao = QF_active_[i];
         if (ao != (QActive *)0) {
             uint32_t queueDepth = ao->eQueue.entry;
             uint32_t queueSize = ao->eQueue.size;
-            
-            rt_kprintf("| %2d  | %-14s | %5lu | %5lu | %s |\n", 
-                      i, 
+
+            rt_kprintf("| %2d  | %-14s | %5lu | %5lu | %s |\n",
+                      i,
                       ao->thread.name[0] != '\0' ? ao->thread.name : "Unknown",
                       queueDepth,
                       queueSize,
@@ -56,19 +60,21 @@ static void QF_printAOStatus(void) {
                       (ao->thread.stat == RT_THREAD_SUSPEND) ? "Susp" : "Other");
         }
     }
+#endif /* 0 */
     rt_kprintf("===============================\n");
 }
+
 
 /*..........................................................................*/
 static void QF_setStrategy(int argc, char **argv) {
     if (argc < 2) {
         rt_kprintf("Usage: qf_strategy <default|highperf>\n");
-        rt_kprintf("Current strategy: %s\n", 
-                  QF_getDispatcherPolicy() == &QF_defaultStrategy ? "Default" : 
+        rt_kprintf("Current strategy: %s\n",
+                  QF_getDispatcherPolicy() == &QF_defaultStrategy ? "Default" :
                   QF_getDispatcherPolicy() == &QF_highPerfStrategy ? "High Performance" : "Unknown");
         return;
     }
-    
+
     if (rt_strcmp(argv[1], "default") == 0) {
         QF_setDispatcherStrategy(&QF_defaultStrategy);
         rt_kprintf("Dispatcher strategy set to: Default\n");
@@ -93,7 +99,7 @@ static void QF_enableDisableOpt(int argc, char **argv) {
         rt_kprintf("Usage: qf_opt <enable|disable>\n");
         return;
     }
-    
+
     if (rt_strcmp(argv[1], "enable") == 0) {
         QF_enableOptLayer();
         rt_kprintf("Optimization layer enabled.\n");

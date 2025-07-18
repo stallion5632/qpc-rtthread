@@ -1,13 +1,13 @@
 /*============================================================================
-* Product: Counter Active Object Header
-* Last updated for version 7.2.0
-* Last updated on  2024-12-19
+* Product: Performance Tests Framework - Main Header
+* Last updated for version 7.3.0
+* Last updated on  2025-07-18
 *
 *                    Q u a n t u m  L e a P s
 *                    ------------------------
 *                    Modern Embedded Software
 *
-* Copyright (C) 2024 Quantum Leaps, LLC. All rights reserved.
+* Copyright (C) 2025 Quantum Leaps, LLC. All rights reserved.
 *
 * This program is open source software: you can redistribute it and/or
 * modify it under the terms of the GNU General Public License as published
@@ -26,45 +26,55 @@
 * <www.state-machine.com/licensing>
 * <info@state-machine.com>
 ============================================================================*/
-#ifndef COUNTER_AO_H_
-#define COUNTER_AO_H_
+#ifndef APP_MAIN_H_
+#define APP_MAIN_H_
 
-#include "app_main.h"
-
-/*==========================================================================*/
-/* Counter AO Configuration */
-/*==========================================================================*/
-#define COUNTER_QUEUE_SIZE      (128U)     /* Event queue size */
-#define COUNTER_STACK_SIZE      (2048U)    /* Stack size in bytes */
+#include "qpc.h"
+#include <rtthread.h>
 
 /*==========================================================================*/
-/* Counter AO State Machine */
+/* Performance Test Framework Constants */
 /*==========================================================================*/
-typedef struct {
-    QActive super;              /* Inherit from QActive */
-    QTimeEvt timeEvt;          /* Time event for periodic updates */
-    uint32_t counter_value;     /* Current counter value */
-    uint32_t update_count;      /* Number of updates performed */
-    rt_bool_t is_running;      /* Running state flag */
-} CounterAO;
+#define PERF_FRAMEWORK_VERSION      "7.3.0"
 
 /*==========================================================================*/
-/* Counter AO Public Interface */
+/* Performance Test Signals (for legacy test compatibility) */
+/*==========================================================================*/
+enum PerformanceAppSignals {
+    /* Counter AO signals */
+    COUNTER_START_SIG = Q_USER_SIG,
+    COUNTER_STOP_SIG,
+    COUNTER_UPDATE_SIG,
+    COUNTER_TIMEOUT_SIG,
+
+    /* Timer AO signals */
+    TIMER_START_SIG,
+    TIMER_STOP_SIG,
+    TIMER_TICK_SIG,
+    TIMER_REPORT_SIG,
+    TIMER_TIMEOUT_SIG,
+
+    /* Application control signals */
+    APP_START_SIG,
+    APP_STOP_SIG,
+    APP_RESET_SIG,
+
+    MAX_PERF_APP_SIG
+};
+
+/*==========================================================================*/
+/* Performance Test Events */
 /*==========================================================================*/
 
-/* Constructor */
-void CounterAO_ctor(void);
+/*==========================================================================*/
+/* Global Synchronization Objects */
+/*==========================================================================*/
+extern rt_mutex_t g_log_mutex;    /* Mutex for thread-safe logging */
+extern rt_mutex_t g_stats_mutex;  /* Mutex for statistics access */
 
-/* Get the singleton instance */
-CounterAO *CounterAO_getInstance(void);
+/*==========================================================================*/
+/* Performance Test Framework API */
+/*==========================================================================*/
+void PerformanceFramework_init(void);
 
-/* Get current counter value (thread-safe) */
-uint32_t CounterAO_getValue(void);
-
-/* Get update count (thread-safe) */
-uint32_t CounterAO_getUpdateCount(void);
-
-/* Check if counter is running */
-rt_bool_t CounterAO_isRunning(void);
-
-#endif /* COUNTER_AO_H_ */
+#endif /* APP_MAIN_H_ */

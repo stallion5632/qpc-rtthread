@@ -251,6 +251,37 @@ static void debug_thread_info(QActive *ao, const char *name) {
 }
 ```
 
+### 3.3.1 AO 事件队列溢出与线程栈断言问题实战
+
+**现象：**
+- 日志持续出现 `[QPC][ERROR] AO event queue full, event drop! AO=..., sig=...`，说明 AO 事件队列溢出。
+- 或遇到 `(stack_start != RT_NULL) assertion failed at function:rt_thread_init, line number:308`，说明 AO 线程栈未分配。
+
+**排查与修正过程：**
+1. 检查 AO 启动时事件队列和栈的分配：
+   ```c
+   // 错误写法（队列太小/栈为NULL）
+   static QEvt *counterAOQueueSto[4];
+   QActive_start_((QActive*)&s_counter_ao, 1, counterAOQueueSto, 4, NULL, 1024, NULL);
+   ```
+2. 修正为：
+   ```c
+   // 正确写法：增大队列容量，静态分配线程栈
+   static QEvt const *counterAOQueueSto[32]; // 增大队列容量为32
+   static rt_uint8_t counterAOStack[1024];   // 静态分配 AO 线程栈
+   QActive_start_((QActive*)&s_counter_ao,
+                  1, // prioSpec
+                  counterAOQueueSto, 32, // 队列存储和长度
+                  counterAOStack, sizeof(counterAOStack), // 栈指针和大小
+                  NULL); // par
+   ```
+3. 这样可彻底消除事件丢失和线程栈断言问题。
+
+**经验总结：**
+- AO 事件队列建议不少于 16~32，根据事件高峰量调整。
+- AO 线程栈必须静态分配并传递给 QActive_start_，不能为 NULL。
+- 相关代码建议加注释，便于团队成员理解和复用。
+
 ### 3.4 QActive_setAttr 断言失败
 
 **错误信息：** `(qf_port) assertion failed at function:, line number:300`
