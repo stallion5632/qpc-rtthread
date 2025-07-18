@@ -48,6 +48,10 @@ static void reset_case(perf_test_case_t *tc)
     tc->result_code = 0;
     tc->user_data = RT_NULL;
     tc->thread = RT_NULL;
+
+    /* Reset statistics */
+    rt_memset(&tc->stats, 0, sizeof(tc->stats));
+    tc->stats.min_value = 0xFFFFFFFF;
 }
 
 void perf_test_list(void)
@@ -108,7 +112,65 @@ rt_int32_t perf_test_restart(const char *name)
 
 void perf_test_report(void)
 {
-    rt_kprintf("=== Perf Test Report ===\n");
+    rt_kprintf("=== Performance Test Report ===\n\n");
+
+    for (rt_int32_t i = 0; i < s_test_count; i++)
+    {
+        perf_test_case_t *tc = s_test_registry[i];
+        rt_tick_t dt = tc->end_tick - tc->start_tick;
+        uint32_t ms = (uint32_t)(dt * 1000 / RT_TICK_PER_SECOND);
+
+        /* Check test type by name and display appropriate statistics */
+        if (strcmp(tc->name, "latency") == 0 && tc->stats.measurements > 0) {
+            rt_kprintf("=== Latency Test Results ===\n");
+            rt_kprintf("Measurements: %u\n", tc->stats.measurements);
+            rt_kprintf("Min latency: %u cycles\n", tc->stats.min_value);
+            rt_kprintf("Max latency: %u cycles\n", tc->stats.max_value);
+            rt_kprintf("Avg latency: %u cycles\n", tc->stats.avg_value);
+            rt_kprintf("Total latency: %u cycles\n\n", tc->stats.total_latency);
+        }
+        else if (strcmp(tc->name, "throughput") == 0 && tc->stats.packets_sent > 0) {
+            rt_kprintf("=== Throughput Test Results ===\n");
+            rt_kprintf("Packets sent: %u\n", tc->stats.packets_sent);
+            rt_kprintf("Packets received: %u\n", tc->stats.packets_received);
+            rt_kprintf("Test duration: %u cycles\n", tc->stats.test_duration);
+            rt_kprintf("Throughput: %u packets/cycle\n\n",
+                       tc->stats.test_duration > 0 ? tc->stats.packets_received / tc->stats.test_duration : 0);
+        }
+        else if (strcmp(tc->name, "jitter") == 0 && tc->stats.measurements > 0) {
+            rt_kprintf("=== Jitter Test Results ===\n");
+            rt_kprintf("Measurements: %u\n", tc->stats.measurements);
+            rt_kprintf("Expected interval: %u cycles\n", tc->stats.expected_interval);
+            rt_kprintf("Min jitter: %u cycles\n", tc->stats.min_value);
+            rt_kprintf("Max jitter: %u cycles\n", tc->stats.max_value);
+            rt_kprintf("Avg jitter: %u cycles\n\n", tc->stats.avg_value);
+        }
+        else if (strcmp(tc->name, "idle_cpu") == 0 && tc->stats.measurements > 0) {
+            rt_kprintf("=== Idle CPU Test Results ===\n");
+            rt_kprintf("Test duration: %u cycles\n", tc->stats.total_cycles);
+            rt_kprintf("Measurements: %u\n", tc->stats.measurements);
+            rt_kprintf("Total idle count: %u\n", tc->stats.total_idle_count);
+            rt_kprintf("Average idle per measurement: %u\n\n", tc->stats.avg_idle_per_measurement);
+        }
+        else if (strcmp(tc->name, "memory") == 0 && tc->stats.total_allocations > 0) {
+            rt_kprintf("=== Memory Test Results ===\n");
+            rt_kprintf("Total allocations: %u\n", tc->stats.total_allocations);
+            rt_kprintf("Total frees: %u\n", tc->stats.total_frees);
+            rt_kprintf("Total allocated: %u bytes\n", (rt_uint32_t)tc->stats.total_allocated_bytes);
+            rt_kprintf("Total freed: %u bytes\n", (rt_uint32_t)tc->stats.total_freed_bytes);
+            rt_kprintf("Max allocated: %u bytes\n", tc->stats.max_allocated_bytes);
+            rt_kprintf("Allocation failures: %u\n\n", tc->stats.allocation_failures);
+        }
+        else {
+            /* Generic report for other tests */
+            rt_kprintf("=== %s Test Results ===\n", tc->name);
+            rt_kprintf("Duration: %u ms\n", ms);
+            rt_kprintf("Iterations: %u\n", tc->iterations);
+            rt_kprintf("Result code: %d\n\n", tc->result_code);
+        }
+    }
+
+    rt_kprintf("=== Summary ===\n");
     rt_kprintf("Name       Dur(ms)  Iter  Ret\n");
     for (rt_int32_t i = 0; i < s_test_count; i++)
     {

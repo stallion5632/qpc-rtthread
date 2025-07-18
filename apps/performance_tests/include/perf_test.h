@@ -4,6 +4,39 @@ extern "C" {
 
 #include <rtthread.h>
 
+/* Performance Test Statistics Structure */
+typedef struct {
+    /* Common statistics */
+    rt_uint32_t measurements;
+    rt_uint32_t total_cycles;
+    rt_uint32_t min_value;
+    rt_uint32_t max_value;
+    rt_uint32_t avg_value;
+
+    /* Latency specific */
+    rt_uint32_t total_latency;
+
+    /* Throughput specific */
+    rt_uint32_t packets_sent;
+    rt_uint32_t packets_received;
+    rt_uint32_t test_duration;
+
+    /* Jitter specific */
+    rt_uint32_t expected_interval;
+
+    /* Memory specific */
+    rt_uint32_t total_allocations;
+    rt_uint32_t total_frees;
+    rt_uint64_t total_allocated_bytes;
+    rt_uint64_t total_freed_bytes;
+    rt_uint32_t max_allocated_bytes;
+    rt_uint32_t allocation_failures;
+
+    /* Idle CPU specific */
+    rt_uint32_t total_idle_count;
+    rt_uint32_t avg_idle_per_measurement;
+} perf_test_stats_t;
+
 /* Global registry for test cases (for main.c auto test traversal) */
 extern struct perf_test_case* s_test_registry[];
 extern rt_int32_t s_test_count;
@@ -42,6 +75,7 @@ typedef struct perf_test_case {
     rt_tick_t        end_tick;          /*< Test end tick */
     rt_uint32_t      iterations;        /*< Operation count for performance statistics */
     int              result_code;       /*< Return value from run() */
+    perf_test_stats_t stats;            /*< Detailed test statistics */
 } perf_test_case_t;
 
 /*
