@@ -1,52 +1,64 @@
 # QPC-RT-Thread Performance Test Suite
 
-This directory contains a comprehensive performance test suite for the QPC (Quantum Platform for C) framework running on RT-Thread RTOS. The test suite is built using QPC Active Objects with proper signal handling, mutex protection, and MISRA C compliance.
+This directory contains a comprehensive performance test suite for the QPC (Quantum Platform for C) framework running on RT-Thread RTOS. The test suite has been restructured to integrate advanced performance tests from backup_old_tests with enhanced reporting capabilities.
 
-## Architecture Overview
+## Test Suite Overview
 
-The performance test suite follows the QPC Active Object pattern with three main Active Objects:
+The performance test suite now includes five specialized performance tests, each designed to measure different aspects of system performance:
 
-### Active Objects
+### Available Tests
 
-1. **CounterAO** (`counter_ao.c`, `counter_ao.h`)
-   - Periodically updates a counter value every 100ms
-   - Publishes counter update events
-   - Tracks performance statistics
-   - Implements proper state transitions with Q_ENTRY_SIG and Q_EXIT_SIG handling
+1. **Latency Test** (`latency_test.c`)
+   - Measures memory access latency using DWT cycle counter
+   - Performs 1000 measurements by default
+   - Reports min, max, and average latency in cycles
+   - Uses hardware cycle counting for precise timing
 
-2. **TimerAO** (`timer_ao.c`, `timer_ao.h`)
-   - Generates timer ticks every 100ms
-   - Implements a dedicated reporting state with proper transitions
-   - Reports system performance every 1 second
-   - Tracks elapsed time and generates periodic reports
+2. **Throughput Test** (`throughput_test.c`)
+   - Tests packet processing throughput using RT-Thread mailboxes
+   - Creates producer and consumer threads
+   - Measures packets sent/received and processing duration
+   - Calculates throughput as packets per cycle
 
-3. **LoggerAO** (`logger_ao.c`, `logger_ao.h`)
-   - Provides thread-safe logging using RT-Thread mutexes
-   - Supports multiple log levels (DEBUG, INFO, WARN, ERROR)
-   - Processes log events asynchronously
-   - Maintains log statistics with counters
+3. **Jitter Test** (`jitter_test.c`)
+   - Measures timing jitter using periodic timers
+   - Tests timer accuracy with expected 100-cycle intervals
+   - Records min, max, and average jitter values
+   - Performs 100 measurements by default
 
-### Application Framework
+4. **Idle CPU Test** (`idle_cpu_test.c`)
+   - Measures idle CPU performance and utilization
+   - Creates low-priority idle task and monitoring thread
+   - Tracks idle counts over measurement periods
+   - Reports total and average idle performance
 
-4. **App Main** (`app_main.c`, `app_main.h`)
-   - Ensures QF framework is initialized exactly once
-   - Guarantees Active Objects are started only once with clear state checks
-   - Provides RT-Thread MSH commands for test control
-   - Manages shared statistics with mutex protection
+5. **Memory Test** (`memory_test.c`)
+   - Tests dynamic memory allocation and deallocation
+   - Tracks allocation statistics and memory usage
+   - Reports allocation failures and memory fragmentation
+   - Measures peak memory usage
 
-5. **Board Support Package** (`bsp.c`, `bsp.h`)
-   - Hardware abstraction layer
-   - Performance monitoring using DWT cycle counter
-   - LED control simulation
-   - System information and memory management
+### Legacy Tests (Still Available)
 
-## Key Features Implemented
+6. **CPU Load Test** (`cpu_load.c`)
+   - Simple loop-based CPU performance test
+   - Baseline performance measurement
 
-### 1. Proper QP/C Framework Signal Handling
-- **Q_ENTRY_SIG, Q_EXIT_SIG, Q_INIT_SIG**: Properly handled in all state machines
-- **User Signals**: Well-defined signal ranges to prevent conflicts
-- **Signal Subscription**: Active Objects subscribe only to relevant signals
-- **Event Publishing**: Proper event publishing and consumption patterns
+7. **Counter AO Test** (`counter_ao_test.c`)
+   - QPC Active Object-based counter test
+   - Event-driven performance measurement
+
+8. **Timer AO Test** (`timer_ao_test.c`)
+   - QPC Active Object timer performance test
+   - Periodic event generation and handling
+
+9. **Memory Stress Test** (`mem_stress_test.c`)
+   - Memory pressure testing
+   - Stress testing memory subsystem
+
+10. **Multithread Test** (`multithread_test.c`)
+    - Multi-threading performance test
+    - Thread synchronization and coordination
 
 ### 2. Framework Initialization Guarantees
 - **QF Single Initialization**: `PerformanceApp_isQFInitialized()` ensures QF is initialized exactly once
@@ -83,19 +95,19 @@ enum PerformanceAppSignals {
     COUNTER_STOP_SIG,
     COUNTER_UPDATE_SIG,
     COUNTER_TIMEOUT_SIG,
-    
+
     /* Timer AO signals */
     TIMER_START_SIG,
     TIMER_STOP_SIG,
     TIMER_TICK_SIG,
     TIMER_REPORT_SIG,
     TIMER_TIMEOUT_SIG,
-    
+
     /* Logger AO signals */
     LOGGER_LOG_SIG,
     LOGGER_FLUSH_SIG,
     LOGGER_TIMEOUT_SIG,
-    
+
     /* Application control signals */
     APP_START_SIG,
     APP_STOP_SIG,
@@ -105,7 +117,73 @@ enum PerformanceAppSignals {
 
 ## Usage
 
-### RT-Thread MSH Commands
+### New Framework Commands
+
+The restructured framework provides unified command interface:
+
+```bash
+# List all available test cases
+perf list
+
+# Start specific tests
+perf start latency      # Start latency test
+perf start throughput   # Start throughput test
+perf start jitter       # Start jitter test
+perf start idle_cpu     # Start idle CPU test
+perf start memory       # Start memory test
+
+# View detailed test reports
+perf report
+
+# Stop specific tests
+perf stop latency
+perf stop throughput
+
+# Restart tests
+perf restart jitter
+```
+
+### Enhanced Report Format
+
+The new framework provides detailed reports with key performance metrics:
+
+```
+=== Latency Test Results ===
+Measurements: 1000
+Min latency: 45 cycles
+Max latency: 123 cycles
+Avg latency: 67 cycles
+Total latency: 67000 cycles
+
+=== Throughput Test Results ===
+Packets sent: 850
+Packets received: 850
+Test duration: 1000000 cycles
+Throughput: 0 packets/cycle
+
+=== Jitter Test Results ===
+Measurements: 100
+Expected interval: 100 cycles
+Min jitter: 2 cycles
+Max jitter: 15 cycles
+Avg jitter: 7 cycles
+
+=== Idle CPU Test Results ===
+Test duration: 1000000 cycles
+Measurements: 100
+Total idle count: 500000
+Average idle per measurement: 5000
+
+=== Memory Test Results ===
+Total allocations: 200
+Total frees: 180
+Total allocated: 204800 bytes
+Total freed: 184320 bytes
+Max allocated: 20480 bytes
+Allocation failures: 0
+```
+
+### Legacy RT-Thread MSH Commands (Deprecated)
 
 ```bash
 # Start the performance test
@@ -151,11 +229,47 @@ LoggerAO_logWarn("Performance warning detected");
 LoggerAO_logError("Critical error occurred");
 ```
 
-## Performance Metrics
+## Troubleshooting and Known Issues
 
-The test suite tracks the following metrics:
+### Common Issues and Solutions
 
-- **Counter Updates**: Number of counter increments
+1. **DWT Counter Shows Zero Values**
+   - **Cause**: DWT (Data Watchpoint and Trace) unit not properly initialized
+   - **Solution**: Ensure CoreDebug_DEMCR register is set to enable DWT
+   - **Check**: Look for DWT initialization logs: `[Test] DWT initialized, CTRL=0x########`
+
+2. **Thread Assertion Failures**
+   - **Cause**: Manually deleting threads that have already exited
+   - **Solution**: Let threads exit naturally, avoid `rt_thread_delete` on completed threads
+   - **Fixed**: All tests now use natural thread termination
+
+3. **Memory Test Format Errors**
+   - **Cause**: 64-bit format specifiers on 32-bit systems
+   - **Solution**: Use 32-bit format with type casting
+   - **Fixed**: Changed `%llu` to `%u` with `(rt_uint32_t)` casting
+
+4. **Jitter Test Unrealistic Values**
+   - **Cause**: Incorrect time interval calculations
+   - **Solution**: Proper cycle-to-tick conversion and value normalization
+   - **Fixed**: Added realistic jitter calculation with bounds checking
+
+### Performance Optimization Tips
+
+1. **DWT Precision**: Enable DWT for high-precision cycle counting
+2. **Thread Priorities**: Adjust priorities based on test requirements
+3. **Memory Configuration**: Increase heap size for memory-intensive tests
+4. **Timing Intervals**: Adjust measurement intervals for system load
+
+### Debug Information
+
+Enable detailed logging by checking initialization messages:
+```
+[Latency Test] DWT initialized, CTRL=0x########
+[Throughput Test] DWT initialized, CTRL=0x########
+[Jitter Test] DWT initialized, CTRL=0x########
+```
+
+Valid DWT CTRL register should show non-zero value indicating proper initialization.
 - **Timer Ticks**: Number of timer tick events
 - **Timer Reports**: Number of performance reports generated
 - **Log Messages**: Total number of log messages processed
@@ -222,7 +336,7 @@ This performance test suite demonstrates best practices for QPC Active Object de
 
 ### 2. Safe Event Timestamp Handling
 - **Problem**: Misuse of `poolId_` field for timestamps causing memory corruption
-- **Solution**: 
+- **Solution**:
   - Custom event structures (`LatencyEvt`, `ThroughputEvt`, etc.) with dedicated `timestamp` fields
   - Proper DWT (Data Watchpoint and Trace) cycle counter initialization and reset
   - Safe timestamp management at the start of each test
