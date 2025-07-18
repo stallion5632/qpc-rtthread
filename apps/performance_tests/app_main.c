@@ -1,7 +1,7 @@
 /*============================================================================
-* Product: Performance Tests Application - Main Implementation
+* Product: Performance Test Suite Application Main Implementation
 * Last updated for version 7.2.0
-* Last updated on  2024-12-19
+* Last updated on  2024-07-13
 *
 *                    Q u a n t u m  L e a P s
 *                    ------------------------
@@ -27,307 +27,300 @@
 * <info@state-machine.com>
 ============================================================================*/
 #include "app_main.h"
+#include <rtthread.h>
+#include "qpc.h"
+#include "bsp.h"
+
 #include "counter_ao.h"
 #include "timer_ao.h"
-#include "bsp.h"
-#include <finsh.h>
-#include <stdio.h>
-
-Q_DEFINE_THIS_MODULE("app_main")
+#include "logger_ao.h"
+#include "qf.h"
 
 /*==========================================================================*/
-/* Module-level definitions */
+/* Static Event Queue Storage for Each Active Object */
 /*==========================================================================*/
 
-/* QF publish-subscribe table */
-#define MAX_PUB_SIG     (32U)
-static QSubscrList l_subscrSto[MAX_PUB_SIG];
+/* Static event queue storage for Counter AO - thread-safe event handling */
+static QEvt const *counterQueueSto[COUNTER_QUEUE_SIZE];
 
-/* AO queue length and stack size definitions (can be adjusted as needed) */
-/* Increased AO event queue sizes for better throughput */
-#ifndef COUNTER_QUEUE_SIZE
-#define COUNTER_QUEUE_SIZE 128U /* Event queue size for Counter AO */
-#endif
-#ifndef TIMER_QUEUE_SIZE
-#define TIMER_QUEUE_SIZE 128U /* Event queue size for Timer AO */
-#endif
+/* Static event queue storage for Timer AO - timer event management */
+static QEvt const *timerQueueSto[TIMER_QUEUE_SIZE];
 
-#ifndef COUNTER_STACK_SIZE
-#define COUNTER_STACK_SIZE 2048U /* Thread stack size for Counter AO */
-#endif
-#ifndef TIMER_STACK_SIZE
-#define TIMER_STACK_SIZE 2048U /* Thread stack size for Timer AO */
-#endif
-
-/* Event storage for Active Objects */
-static QEvt const *l_counterQueueSto[COUNTER_QUEUE_SIZE]; /* Event queue storage for Counter AO */
-static QEvt const *l_timerQueueSto[TIMER_QUEUE_SIZE];     /* Event queue storage for Timer AO */
-
-/* AO thread stack memory */
-static uint8_t counter_stack[COUNTER_STACK_SIZE]; /* Thread stack for Counter AO */
-static uint8_t timer_stack[TIMER_STACK_SIZE];     /* Thread stack for Timer AO */
-
-/* Event pool size definitions */
-#define SMALL_EVENT_SIZE    sizeof(QEvt)             /* Size of small event pool element */
-#define MEDIUM_EVENT_SIZE   sizeof(CounterUpdateEvt) /* Size of medium event pool element */
-
-static QF_MPOOL_EL(QEvt) l_smlPoolSto[100U];              /* Small event pool storage */
-static QF_MPOOL_EL(CounterUpdateEvt) l_medPoolSto[50U];  /* Medium event pool storage */
-
-/* Application state tracking flags */
-static rt_bool_t l_qf_initialized = RT_FALSE; /* QF framework initialization flag */
-static rt_bool_t l_aos_started = RT_FALSE;    /* Active Objects started flag */
+/* Static event queue storage for Logger AO - message logging */
+static QEvt const *loggerQueueSto[LOGGER_QUEUE_SIZE];
 
 /*==========================================================================*/
-/* Global Synchronization Objects */
+/* Active Object Instance Table */
 /*==========================================================================*/
-rt_mutex_t g_log_mutex = RT_NULL;   /* Mutex for thread-safe logging */
-rt_mutex_t g_stats_mutex = RT_NULL; /* Mutex for statistics access */
 
-/*==========================================================================*/
-/* Shared Statistics Structure */
-/*==========================================================================*/
-PerformanceStats g_perf_stats = {
-    .counter_updates = 0U,    /* Number of counter updates */
-    .timer_ticks = 0U,        /* Number of timer ticks */
-    .timer_reports = 0U,      /* Number of timer reports */
-    .log_messages = 0U,       /* Number of log messages */
-    .test_duration_ms = 0U,   /* Test duration in milliseconds */
-    .test_running = RT_FALSE  /* Test running status flag */
+/* Table of Active Object pointers for centralized management */
+static QActive * const activeObjects[] = {
+    &g_counter.super,    /* Counter Active Object instance */
+    &g_timer.super,      /* Timer Active Object instance */
+    &g_logger.super      /* Logger Active Object instance */
 };
 
 /*==========================================================================*/
-/* Active Object Instances */
+/* Global Subscription Table for Publish-Subscribe System */
 /*==========================================================================*/
-QActive *AO_Counter = RT_NULL;
-QActive *AO_Timer   = RT_NULL;
+
+/* Global subscription storage - enables publish-subscribe event routing */
+QSubscrList subscriptions[MAX_APP_SIG];
 
 /*==========================================================================*/
-/* Application Initialization */
+/* Application State Variables */
 /*==========================================================================*/
-void PerformanceApp_init(void) {
-    rt_kprintf("[QPC] module: %s\n", Q_this_module_);
-    /* Initialize BSP first */
+
+/* Application initialization state flag - prevents double initialization */
+static rt_bool_t qf_initialized = RT_FALSE;
+
+/* Application running state flag - tracks if AOs are started */
+static rt_bool_t qf_started = RT_FALSE;
+
+/* Application statistics counters for monitoring */
+static uint32_t g_app_event_count = 0U;      /* Total events processed */
+static uint32_t g_app_error_count = 0U;      /* Total error count */
+static uint32_t g_app_runtime_ms = 0U;       /* Application runtime in ms */
+
+/*==========================================================================*/
+/* Application Initialization Function */
+/*==========================================================================*/
+
+void app_main_init(void)
+{
+    /* Prevent double initialization */
+    if (qf_initialized)
+    {
+        rt_kprintf("Performance Tests: Already initialized, skipping...\n");
+        return;
+    }
+
+    rt_kprintf("=== Performance Tests Auto-Initialize ===\n");
+    rt_kprintf("Performance Tests: Initializing...\n");
+
+    /* Initialize QF framework - core event handling system */
+    rt_kprintf("Performance Tests: Initializing QF framework...\n");
+    QF_init();
+
+    /* Initialize publish-subscribe system with global subscription table */
+    rt_kprintf("Performance Tests: Initializing publish-subscribe system...\n");
+    QF_psInit(subscriptions, Q_DIM(subscriptions));
+
+    /* Print event struct sizes for debugging and memory optimization */
+    rt_kprintf("sizeof(QEvt)=%d\n", (int)sizeof(QEvt));
+    rt_kprintf("sizeof(CounterEvt)=%d\n", (int)sizeof(CounterEvt));
+    rt_kprintf("sizeof(TimerEvt)=%d\n", (int)sizeof(TimerEvt));
+    rt_kprintf("sizeof(LoggerEvt)=%d\n", (int)sizeof(LoggerEvt));
+    rt_kprintf("sizeof(PerfTestEvt)=%d\n", (int)sizeof(PerfTestEvt));
+
+    /* Initialize Board Support Package - hardware abstraction layer */
+    rt_kprintf("Performance Tests: Initializing BSP...\n");
     BSP_init();
 
-    /* Create synchronization objects */
-    if (g_log_mutex == RT_NULL) {
-        g_log_mutex = rt_mutex_create("log_mtx", RT_IPC_FLAG_PRIO);
-        Q_ASSERT(g_log_mutex != RT_NULL);
-    }
+    /* Initialize individual Active Objects with their respective configurations */
+    rt_kprintf("Performance Tests: Initializing Active Objects...\n");
 
-    if (g_stats_mutex == RT_NULL) {
-        g_stats_mutex = rt_mutex_create("stats_mtx", RT_IPC_FLAG_PRIO);
-        Q_ASSERT(g_stats_mutex != RT_NULL);
-    }
+    /* Initialize Counter AO - handles counting operations */
+    CounterAO_ctor(&g_counter);
+    rt_kprintf("Performance Tests: Counter AO initialized\n");
 
-    /* Initialize QF only once */
-    if (!l_qf_initialized) {
-        QF_init();
+    /* Initialize Timer AO - handles timing operations */
+    TimerAO_ctor(&g_timer);
+    rt_kprintf("Performance Tests: Timer AO initialized\n");
 
-        /* Initialize publish-subscribe */
-        QF_psInit(l_subscrSto, Q_DIM(l_subscrSto));
+    /* Initialize Logger AO - handles message logging */
+    LoggerAO_ctor(&g_logger);
+    rt_kprintf("Performance Tests: Logger AO initialized\n");
 
-        /* Initialize event pools */
-        QF_poolInit(l_smlPoolSto, sizeof(l_smlPoolSto), SMALL_EVENT_SIZE);
-        QF_poolInit(l_medPoolSto, sizeof(l_medPoolSto), MEDIUM_EVENT_SIZE);
+    /* Mark initialization as complete */
+    qf_initialized = RT_TRUE;
+    g_app_runtime_ms = rt_tick_get() * 1000U / RT_TICK_PER_SECOND;
 
-        l_qf_initialized = RT_TRUE;
-    }
-
-    /* Construct Active Objects */
-    CounterAO_ctor();
-    TimerAO_ctor();
-    AO_Counter = (QActive *)CounterAO_getInstance();
-    AO_Timer   = (QActive *)TimerAO_getInstance();
-
-    /* Reset statistics */
-    PerformanceApp_resetStats();
+    rt_kprintf("Performance Tests: Initialization complete\n");
 }
 
 /*==========================================================================*/
-/* Application Start */
+/* Application Start Function */
 /*==========================================================================*/
-int PerformanceApp_start(void) {
-    /* Ensure initialization is complete */
-    if (!l_qf_initialized) {
-        PerformanceApp_init();
+
+void app_main_start(void)
+{
+    /* Ensure application is initialized before starting */
+    if (!qf_initialized) {
+        rt_kprintf("Performance Tests: Not initialized, calling init first...\n");
+        app_main_init();
     }
 
-    /* Start Active Objects only once */
-    if (!l_aos_started) {
-        /* Set thread names before starting Active Objects */
-        QActive_setAttr(AO_Counter, THREAD_NAME_ATTR, "counter_ao");
-        QActive_setAttr(AO_Timer, THREAD_NAME_ATTR, "timer_ao");
-
-        /* Start Active Objects with their priorities and event queues */
-        QACTIVE_START(AO_Counter,
-                      (uint_fast8_t)COUNTER_AO_PRIO,
-                      l_counterQueueSto,
-                      Q_DIM(l_counterQueueSto),
-                      counter_stack,
-                      COUNTER_STACK_SIZE,
-                      (QEvt *)0);
-
-        QACTIVE_START(AO_Timer,
-                      (uint_fast8_t)TIMER_AO_PRIO,
-                      l_timerQueueSto,
-                      Q_DIM(l_timerQueueSto),
-                      timer_stack,
-                      TIMER_STACK_SIZE,
-                      (QEvt *)0);
-
-        l_aos_started = RT_TRUE;
+    /* Prevent double start */
+    if (qf_started) {
+        rt_kprintf("Performance Tests: Already started, skipping...\n");
+        return;
     }
 
-    /* Mark test as running */
-    rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
-    g_perf_stats.test_running = RT_TRUE;
-    rt_mutex_release(g_stats_mutex);
+    rt_kprintf("=== Performance Tests Starting Active Objects ===\n");
 
-    /* Post start signals to Active Objects with small delays to reduce event burst */
-    static QEvt const startEvt = { APP_START_SIG, 0U, 0U };
+    /* Start Counter AO with dedicated priority and queue */
+    QActive_start_(&g_counter.super,
+                   COUNTER_AO_PRIO,              /* Priority level */
+                   counterQueueSto,              /* Event queue storage */
+                   Q_DIM(counterQueueSto),       /* Queue size */
+                   (void *)0,                    /* No stack (uses main stack) */
+                   0U,                           /* Stack size = 0 */
+                   (void *)0);                   /* No initialization parameter */
+    rt_kprintf("Performance Tests: Counter AO started with priority %d\n", COUNTER_AO_PRIO);
 
-    QACTIVE_POST(AO_Timer, &startEvt, (void *)0);
-    rt_thread_mdelay(10); /* Small delay */
+    /* Start Timer AO with dedicated priority and queue */
+    QActive_start_(&g_timer.super,
+                   TIMER_AO_PRIO,                /* Priority level */
+                   timerQueueSto,                /* Event queue storage */
+                   Q_DIM(timerQueueSto),         /* Queue size */
+                   (void *)0,                    /* No stack (uses main stack) */
+                   0U,                           /* Stack size = 0 */
+                   (void *)0);                   /* No initialization parameter */
+    rt_kprintf("Performance Tests: Timer AO started with priority %d\n", TIMER_AO_PRIO);
 
-    QACTIVE_POST(AO_Counter, &startEvt, (void *)0);
+    /* Start Logger AO with dedicated priority and queue */
+    QActive_start_(&g_logger.super,
+                   LOGGER_AO_PRIO,               /* Priority level */
+                   loggerQueueSto,               /* Event queue storage */
+                   Q_DIM(loggerQueueSto),        /* Queue size */
+                   (void *)0,                    /* No stack (uses main stack) */
+                   0U,                           /* Stack size = 0 */
+                   (void *)0);                   /* No initialization parameter */
+    rt_kprintf("Performance Tests: Logger AO started with priority %d\n", LOGGER_AO_PRIO);
 
-    /* Log the test start using direct logging */
-    rt_kprintf("[INFO ] Performance test started\n");
+    /* Mark application as started */
+    qf_started = RT_TRUE;
 
-    /* Event generation optimization: can be further tuned here */
-    /* Example: burst generate counter/timer events for stress test */
-    /*
-    for (uint32_t i = 0U; i < 100U; ++i) {
-        CounterUpdateEvt *evt = Q_NEW(CounterUpdateEvt, COUNTER_UPDATE_SIG);
-        if (evt != NULL) {
-            evt->counter_value = i;
-            evt->timestamp = BSP_getTimestampMs();
-            QACTIVE_POST(AO_Counter, (QEvt *)evt, (void *)0);
+    rt_kprintf("Performance Tests: All Active Objects started successfully\n");
+    rt_kprintf("Performance Tests: Application ready for testing\n");
+}
+
+/*==========================================================================*/
+/* Application Stop Function */
+/*==========================================================================*/
+
+void app_main_stop(void)
+{
+    if (!qf_started) {
+        rt_kprintf("Performance Tests: Not started, nothing to stop\n");
+        return;
+    }
+
+    rt_kprintf("=== Performance Tests Stopping Active Objects ===\n");
+
+    /* Stop all Active Objects gracefully by unsubscribing and stopping */
+    for (uint8_t i = 0U; i < Q_DIM(activeObjects); ++i) {
+        if (activeObjects[i] != (QActive *)0) {
+            /* Unsubscribe from all signals to prevent event delivery */
+            QActive_unsubscribeAll(activeObjects[i]);
+            rt_kprintf("Performance Tests: AO[%d] unsubscribed from all signals\n", i);
+
+            /* RT-Thread port doesn't support QActive_stop, use alternative approach */
+            /* Send a termination signal to the AO instead */
+            QEvt const *termEvt = Q_NEW(QEvt, PERF_TEST_STOP_SIG);
+            if (termEvt != NULL) {
+                QACTIVE_POST(activeObjects[i], termEvt, &l_appMain);
+                rt_kprintf("Performance Tests: AO[%d] termination signal sent\n", i);
+            }
         }
     }
-    */
 
-    return 0;
+    /* Mark application as stopped */
+    qf_started = RT_FALSE;
+
+    rt_kprintf("Performance Tests: All Active Objects stopped\n");
 }
 
 /*==========================================================================*/
-/* Application Stop */
+/* Application Status Query Functions */
 /*==========================================================================*/
-void PerformanceApp_stop(void) {
-    /* Mark test as stopped */
-    rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
-    g_perf_stats.test_running = RT_FALSE;
-    rt_mutex_release(g_stats_mutex);
 
-    /* Post stop signals to Active Objects */
-    static QEvt const stopEvt = { APP_STOP_SIG, 0U, 0U };
-    QACTIVE_POST(AO_Counter, &stopEvt, (void *)0);
-    QACTIVE_POST(AO_Timer, &stopEvt, (void *)0);
+rt_bool_t app_main_is_initialized(void)
+{
+    return qf_initialized;
+}
 
-    /* Log the test stop using direct logging */
-    rt_kprintf("[INFO ] Performance test stopped\n");
+rt_bool_t app_main_is_running(void)
+{
+    return qf_started;
 }
 
 /*==========================================================================*/
-/* Statistics Management */
+/* Application Statistics Function */
 /*==========================================================================*/
-void PerformanceApp_getStats(PerformanceStats *stats) {
-    Q_REQUIRE(stats != (PerformanceStats *)0);
 
-    rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
-    *stats = g_perf_stats;
-    rt_mutex_release(g_stats_mutex);
-}
+void app_main_get_stats(void)
+{
+    uint32_t current_time_ms = rt_tick_get() * 1000U / RT_TICK_PER_SECOND;
+    uint32_t uptime_ms = current_time_ms - g_app_runtime_ms;
 
-void PerformanceApp_resetStats(void) {
-    rt_mutex_take(g_stats_mutex, RT_WAITING_FOREVER);
-    g_perf_stats.counter_updates = 0U;
-    g_perf_stats.timer_ticks = 0U;
-    g_perf_stats.timer_reports = 0U;
-    g_perf_stats.log_messages = 0U;
-    g_perf_stats.test_duration_ms = 0U;
-    g_perf_stats.test_running = RT_FALSE;
-    rt_mutex_release(g_stats_mutex);
+    rt_kprintf("\n=== Performance Test Application Statistics ===\n");
+    rt_kprintf("Initialization Status: %s\n", qf_initialized ? "INITIALIZED" : "NOT_INITIALIZED");
+    rt_kprintf("Running Status: %s\n", qf_started ? "RUNNING" : "STOPPED");
+    rt_kprintf("Application Uptime: %u ms\n", uptime_ms);
+    rt_kprintf("Total Events Processed: %u\n", g_app_event_count);
+    rt_kprintf("Total Errors: %u\n", g_app_error_count);
+    rt_kprintf("Active Objects Count: %d\n", (int)Q_DIM(activeObjects));
+    rt_kprintf("Subscription Table Size: %d\n", (int)Q_DIM(subscriptions));
+
+    /* Print individual AO status */
+    rt_kprintf("\n--- Active Object Status ---\n");
+    rt_kprintf("Counter AO Priority: %d\n", COUNTER_AO_PRIO);
+    rt_kprintf("Timer AO Priority: %d\n", TIMER_AO_PRIO);
+    rt_kprintf("Logger AO Priority: %d\n", LOGGER_AO_PRIO);
+
+    /* Print memory usage information */
+    rt_kprintf("\n--- Memory Usage ---\n");
+    rt_kprintf("Counter Queue Size: %d events\n", COUNTER_QUEUE_SIZE);
+    rt_kprintf("Timer Queue Size: %d events\n", TIMER_QUEUE_SIZE);
+    rt_kprintf("Logger Queue Size: %d events\n", LOGGER_QUEUE_SIZE);
+    rt_kprintf("Total Queue Memory: %d bytes\n",
+               (int)(sizeof(counterQueueSto) + sizeof(timerQueueSto) + sizeof(loggerQueueSto)));
+    rt_kprintf("================================================\n\n");
 }
 
 /*==========================================================================*/
-/* State Query Functions */
+/* MSH Shell Command Implementations */
 /*==========================================================================*/
-rt_bool_t PerformanceApp_isQFInitialized(void) {
-    return l_qf_initialized;
+
+void app_init_cmd(void)
+{
+    rt_kprintf("Initializing Performance Test Application...\n");
+    app_main_init();
 }
 
-rt_bool_t PerformanceApp_areAOsStarted(void) {
-    return l_aos_started;
+void app_start_cmd(void)
+{
+    rt_kprintf("Starting Performance Test Application...\n");
+    app_main_start();
+}
+
+void app_stop_cmd(void)
+{
+    rt_kprintf("Stopping Performance Test Application...\n");
+    app_main_stop();
+}
+
+void app_status_cmd(void)
+{
+    rt_kprintf("Performance Test Application Status:\n");
+    rt_kprintf("  Initialized: %s\n", app_main_is_initialized() ? "YES" : "NO");
+    rt_kprintf("  Running: %s\n", app_main_is_running() ? "YES" : "NO");
+}
+
+void app_stats_cmd(void)
+{
+    app_main_get_stats();
 }
 
 /*==========================================================================*/
-/* RT-Thread MSH Commands */
+/* MSH Shell Command Exports */
 /*==========================================================================*/
-int perf_test_start_cmd(int argc, char** argv) {
-    (void)argc; /* Suppress unused parameter warning */
-    (void)argv; /* Suppress unused parameter warning */
 
-    rt_kprintf("Starting performance test...\n");
-    int result = PerformanceApp_start();
-    if (result == 0) {
-        rt_kprintf("Performance test started successfully\n");
-    } else {
-        rt_kprintf("Failed to start performance test\n");
-    }
-    return result;
-}
-MSH_CMD_EXPORT(perf_test_start_cmd, Start performance test);
-
-int perf_test_stop_cmd(int argc, char** argv) {
-    (void)argc; /* Suppress unused parameter warning */
-    (void)argv; /* Suppress unused parameter warning */
-
-    rt_kprintf("Stopping performance test...\n");
-    PerformanceApp_stop();
-    rt_kprintf("Performance test stopped\n");
-    return 0;
-}
-MSH_CMD_EXPORT(perf_test_stop_cmd, Stop performance test);
-
-int perf_test_stats_cmd(int argc, char** argv) {
-    (void)argc; /* Suppress unused parameter warning */
-    (void)argv; /* Suppress unused parameter warning */
-
-    PerformanceStats stats;
-    PerformanceApp_getStats(&stats);
-
-    rt_kprintf("=== Performance Test Statistics ===\n");
-    rt_kprintf("Test running: %s\n", stats.test_running ? "Yes" : "No");
-    rt_kprintf("Test duration: %u ms\n", stats.test_duration_ms);
-    rt_kprintf("Counter updates: %u\n", stats.counter_updates);
-    rt_kprintf("Timer ticks: %u\n", stats.timer_ticks);
-    rt_kprintf("Timer reports: %u\n", stats.timer_reports);
-    rt_kprintf("Log messages: %u\n", stats.log_messages);
-    rt_kprintf("QF initialized: %s\n", PerformanceApp_isQFInitialized() ? "Yes" : "No");
-    rt_kprintf("AOs started: %s\n", PerformanceApp_areAOsStarted() ? "Yes" : "No");
-
-    // Check if statistics are consistent with actual events and warn the user
-    if (stats.timer_reports > 0 && (stats.timer_reports != (stats.timer_ticks / 10))) {
-        rt_kprintf("[WARN ] Timer reports count (%u) does not match Timer ticks/10 (%u), possible timing deviation.\n", stats.timer_reports, stats.timer_ticks / 10);
-    }
-    if (stats.counter_updates != (stats.timer_ticks * 2)) {
-        rt_kprintf("[WARN ] Counter updates (%u) does not match Timer ticks*2 (%u), please check counter logic.\n", stats.counter_updates, stats.timer_ticks * 2);
-    }
-
-    return 0;
-}
-MSH_CMD_EXPORT(perf_test_stats_cmd, Show performance test statistics);
-
-int perf_test_reset_cmd(int argc, char** argv) {
-    (void)argc; /* Suppress unused parameter warning */
-    (void)argv; /* Suppress unused parameter warning */
-
-    rt_kprintf("Resetting performance test statistics...\n");
-    PerformanceApp_resetStats();
-    rt_kprintf("Statistics reset complete\n");
-    return 0;
-}
-MSH_CMD_EXPORT(perf_test_reset_cmd, Reset performance test statistics);
+/* Export shell commands for interactive testing */
+MSH_CMD_EXPORT(app_init_cmd, Initialize performance test application);
+MSH_CMD_EXPORT(app_start_cmd, Start performance test application);
+MSH_CMD_EXPORT(app_stop_cmd, Stop performance test application);
+MSH_CMD_EXPORT(app_status_cmd, Show application status);
+MSH_CMD_EXPORT(app_stats_cmd, Show application statistics);

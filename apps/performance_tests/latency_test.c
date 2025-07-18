@@ -3,7 +3,7 @@
 * Last updated for version 7.2.0
 * Last updated on  2024-07-08
 *
-*                    Q u a n t u m  L e a P s
+*                    Q u a n t u m  L e aP s
 *                    ------------------------
 *                    Modern Embedded Software
 *
@@ -26,7 +26,17 @@
 * <www.state-machine.com/licensing>
 * <info@state-machine.com>
 ============================================================================*/
+
 #include "perf_common.h"
+#include <rtthread.h>
+// 增大事件池和队列、堆栈，防止极端情况下溢出
+#define LATENCY_POOL_SIZE 512
+
+ALIGN(RT_ALIGN_SIZE) static QEvt const *latency_queueSto[LATENCY_POOL_SIZE]; // Queue length matches latency event pool size
+ALIGN(RT_ALIGN_SIZE) static uint8_t latency_stack[8192];  /* 再次增大堆栈防止溢出 */
+
+#define MAX_PUB_SIG MAX_PERF_SIG
+static QSubscrList subscrSto[MAX_PUB_SIG];
 
 Q_DEFINE_THIS_FILE
 
@@ -58,10 +68,10 @@ static QState LatencyAO_testing(LatencyAO * const me, QEvt const * const e);
 
 static void LatencyAO_ctor(void) {
     LatencyAO *me = &l_latencyAO;
-    
+
     QActive_ctor(&me->super, Q_STATE_CAST(&LatencyAO_initial));
     QTimeEvt_ctorX(&me->timeEvt, &me->super, LATENCY_TIMEOUT_SIG, 0U);
-    
+
     me->start_time = 0;
     me->end_time = 0;
     me->min_latency = 0xFFFFFFFF;
@@ -75,123 +85,133 @@ static void LatencyAO_ctor(void) {
 /*==========================================================================*/
 
 static QState LatencyAO_initial(LatencyAO * const me, QEvt const * const e) {
+    QState status;
     switch (e->sig) {
-        case Q_ENTRY_SIG: {
+        case Q_ENTRY_SIG:
+        case Q_EXIT_SIG:
+        case Q_INIT_SIG:
+        case Q_EMPTY_SIG: {
+            status = Q_HANDLED();
+            break;
+        }
+        default: {
             /* Subscribe to latency test signals */
             QActive_subscribe(&me->super, LATENCY_START_SIG);
             QActive_subscribe(&me->super, LATENCY_END_SIG);
             QActive_subscribe(&me->super, LATENCY_MEASURE_SIG);
             QActive_subscribe(&me->super, LATENCY_STOP_SIG);
-            return Q_HANDLED();
-        }
-        case Q_INIT_SIG: {
-            return Q_TRAN(&LatencyAO_idle);
-        }
-        default: {
-            return Q_SUPER(&QHsm_top);
+
+            status = Q_TRAN(&LatencyAO_idle);
+            break;
         }
     }
+    return status;
 }
 
 static QState LatencyAO_idle(LatencyAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Latency Test: Idle state\n");
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EXIT_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_INIT_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case LATENCY_START_SIG: {
             rt_kprintf("Latency Test: Starting latency measurements\n");
-            
+
             /* Reset measurement counters */
             g_latency_measurements = 0;
             me->min_latency = 0xFFFFFFFF;
             me->max_latency = 0;
             me->total_latency = 0;
             me->sequence_counter = 0;
-            
+
             /* Reset and start DWT cycle counter */
             PerfCommon_resetDWT();
-            
+
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
-            
+
             status = Q_TRAN(&LatencyAO_testing);
             break;
         }
-        
+
         case LATENCY_STOP_SIG: {
             rt_kprintf("Latency Test: Stopping\n");
             status = Q_HANDLED();
             break;
         }
-        
+
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
         }
     }
-    
+
     return status;
 }
 
 static QState LatencyAO_testing(LatencyAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Latency Test: Testing state\n");
-            
+
             /* Start the first measurement */
             LatencyEvt *evt = Q_NEW(LatencyEvt, LATENCY_MEASURE_SIG);
+            if (evt == NULL) {
+                rt_kprintf("ERROR: LatencyEvt alloc failed!\n");
+                status = Q_HANDLED();
+                break;
+            }
             evt->timestamp = PerfCommon_getDWTCycles();
             evt->sequence_id = ++me->sequence_counter;
-            
+
             QACTIVE_POST(&me->super, &evt->super, me);
-            
+
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EXIT_SIG: {
             QTimeEvt_disarm(&me->timeEvt);
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_INIT_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case LATENCY_MEASURE_SIG: {
             LatencyEvt const *evt = (LatencyEvt const *)e;
             uint32_t current_time = PerfCommon_getDWTCycles();
             uint32_t latency = current_time - evt->timestamp;
-            
+
             /* Update statistics */
             if (latency < me->min_latency) {
                 me->min_latency = latency;
@@ -201,51 +221,54 @@ static QState LatencyAO_testing(LatencyAO * const me, QEvt const * const e) {
             }
             me->total_latency += latency;
             g_latency_measurements++;
-            
+
             /* Send next measurement if not stopping */
             if (g_latency_measurements < 1000) {
                 LatencyEvt *next_evt = Q_NEW(LatencyEvt, LATENCY_MEASURE_SIG);
-                next_evt->timestamp = current_time;
-                next_evt->sequence_id = ++me->sequence_counter;
-                
-                QACTIVE_POST(&me->super, &next_evt->super, me);
+                if (next_evt == NULL) {
+                    rt_kprintf("ERROR: LatencyEvt alloc failed!\n");
+                } else {
+                    next_evt->timestamp = current_time;
+                    next_evt->sequence_id = ++me->sequence_counter;
+                    QACTIVE_POST(&me->super, &next_evt->super, me);
+                }
             }
-            
+
             status = Q_HANDLED();
             break;
         }
-        
+
         case LATENCY_TIMEOUT_SIG: {
             rt_kprintf("Latency Test: Timeout reached\n");
-            
+
             /* Calculate and print results */
-            uint32_t avg_latency = (g_latency_measurements > 0) ? 
+            uint32_t avg_latency = (g_latency_measurements > 0) ?
                                    (me->total_latency / g_latency_measurements) : 0;
-            
+
             rt_kprintf("=== Latency Test Results ===\n");
             rt_kprintf("Measurements: %u\n", g_latency_measurements);
             rt_kprintf("Min latency: %u cycles\n", me->min_latency);
             rt_kprintf("Max latency: %u cycles\n", me->max_latency);
             rt_kprintf("Avg latency: %u cycles\n", avg_latency);
             rt_kprintf("Total latency: %u cycles\n", me->total_latency);
-            
+
             status = Q_TRAN(&LatencyAO_idle);
             break;
         }
-        
+
         case LATENCY_STOP_SIG: {
             rt_kprintf("Latency Test: Stopping test\n");
             QTimeEvt_disarm(&me->timeEvt);
             status = Q_TRAN(&LatencyAO_idle);
             break;
         }
-        
+
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
         }
     }
-    
+
     return status;
 }
 
@@ -253,49 +276,58 @@ static QState LatencyAO_testing(LatencyAO * const me, QEvt const * const e) {
 /* Latency Test Static Variables - Persistent for RT-Thread integration */
 /*==========================================================================*/
 
-static QEvt const *latency_queueSto[10];
-static uint8_t latency_stack[1024];  /* Reduced stack size for embedded */
 static rt_bool_t test_running = RT_FALSE;
 
 /*==========================================================================*/
 /* Latency Test Public Functions */
 /*==========================================================================*/
 
+void LatencyTest_frameworkInit(void) {
+    static uint8_t isInitialized = 0;
+    if (isInitialized != 0) {
+        rt_kprintf("QF already initialized, skipping...\n");
+        return;
+    }
+    isInitialized = 1;
+    QF_init();
+    QF_psInit(subscrSto, MAX_PUB_SIG);
+}
+
 void LatencyTest_start(void) {
+    /* Initialize common test infrastructure */
+    PerfCommon_initTest();
+    /* Initialize QF framework and publish-subscribe before start */
+    LatencyTest_frameworkInit();
     /* Prevent multiple simultaneous test instances */
     if (test_running) {
         rt_kprintf("Latency test already running\n");
         return;
     }
-    
-    /* Initialize common performance test infrastructure */
-    PerfCommon_initTest();
-    
-    /* Initialize only the latency event pool */
+
+    /* Initialize latency event pool using common implementation */
     PerfCommon_initLatencyPool();
-    
-    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
-    QF_init();
-    
-    /* Construct the latency AO */
+
     LatencyAO_ctor();
-    
-    /* Start the latency AO */
     QACTIVE_START(&l_latencyAO.super,
                   LATENCY_AO_PRIO,
-                  latency_queueSto, Q_DIM(latency_queueSto),
+                  latency_queueSto, LATENCY_POOL_SIZE,
                   latency_stack, sizeof(latency_stack),
                   (void *)0);
-    
+
     /* Initialize QF framework (returns immediately in RT-Thread) */
     QF_run();
-    
+
     /* Mark test as running */
     test_running = RT_TRUE;
-    
+
     /* Send start signal */
-    QACTIVE_POST(&l_latencyAO.super, Q_NEW(QEvt, LATENCY_START_SIG), &l_latencyAO);
-    
+    LatencyEvt *start_evt = Q_NEW(LatencyEvt, LATENCY_START_SIG);
+    if (start_evt == NULL) {
+        rt_kprintf("ERROR: LatencyEvt alloc failed!\n");
+    } else {
+        QACTIVE_POST(&l_latencyAO.super, &start_evt->super, &l_latencyAO);
+    }
+
     rt_kprintf("Latency test started successfully\n");
 }
 
@@ -304,28 +336,33 @@ void LatencyTest_stop(void) {
         rt_kprintf("Latency test not running\n");
         return;
     }
-    
+
     /* Send stop signal */
-    QACTIVE_POST(&l_latencyAO.super, Q_NEW(QEvt, LATENCY_STOP_SIG), &l_latencyAO);
-    
+    LatencyEvt *stop_evt = Q_NEW(LatencyEvt, LATENCY_STOP_SIG);
+    if (stop_evt == NULL) {
+        rt_kprintf("ERROR: LatencyEvt alloc failed!\n");
+    } else {
+        QACTIVE_POST(&l_latencyAO.super, &stop_evt->super, &l_latencyAO);
+    }
+
     /* Give time for stop signal to be processed */
     rt_thread_mdelay(100);
-    
+
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_START_SIG);
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_END_SIG);
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_MEASURE_SIG);
     QActive_unsubscribe(&l_latencyAO.super, LATENCY_STOP_SIG);
-    
+
     /* Mark test as stopped */
     test_running = RT_FALSE;
-    
+
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
-    
+
     /* Print final results */
     PerfCommon_printResults("Latency", g_latency_measurements);
-    
+
     rt_kprintf("Latency test stopped successfully\n");
 }
 

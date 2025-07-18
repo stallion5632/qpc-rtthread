@@ -79,10 +79,10 @@ static rt_thread_t memory_test_thread = RT_NULL;
 
 static void MemoryAO_ctor(void) {
     MemoryAO *me = &l_memoryAO;
-    
+
     QActive_ctor(&me->super, Q_STATE_CAST(&MemoryAO_initial));
     QTimeEvt_ctorX(&me->timeEvt, &me->super, MEMORY_TIMEOUT_SIG, 0U);
-    
+
     me->alloc_count = 0;
     me->free_count = 0;
     me->total_allocated = 0;
@@ -110,13 +110,13 @@ static uint32_t remove_from_tracker(void *ptr) {
     for (uint32_t i = 0; i < alloc_tracker_index; i++) {
         if (alloc_tracker[i].ptr == ptr) {
             uint32_t size = alloc_tracker[i].size;
-            
+
             /* Move last entry to this position */
             if (i < alloc_tracker_index - 1) {
                 alloc_tracker[i] = alloc_tracker[alloc_tracker_index - 1];
             }
             alloc_tracker_index--;
-            
+
             return size;
         }
     }
@@ -139,41 +139,41 @@ static void free_all_tracked(void) {
 
 static void memory_test_thread_func(void *parameter) {
     (void)parameter;
-    
+
     uint32_t cycle = 0;
-    
+
     while (!g_stopLoadThreads) {
         /* Allocate memory of various sizes */
         for (uint32_t i = 0; i < num_test_sizes; i++) {
             uint32_t size = test_sizes[i];
-            
+
             MemoryEvt *alloc_evt = Q_NEW(MemoryEvt, MEMORY_ALLOC_SIG);
             alloc_evt->timestamp = PerfCommon_getDWTCycles();
             alloc_evt->alloc_size = size;
             alloc_evt->ptr = RT_NULL;
-            
+
             QACTIVE_POST(&l_memoryAO.super, &alloc_evt->super, &l_memoryAO);
-            
+
             /* Small delay between allocations */
             rt_thread_mdelay(10);
-            
+
             if (g_stopLoadThreads) break;
         }
-        
+
         /* Occasionally free some memory */
         if (cycle % 3 == 0) {
             MemoryEvt *free_evt = Q_NEW(MemoryEvt, MEMORY_FREE_SIG);
             free_evt->timestamp = PerfCommon_getDWTCycles();
             free_evt->alloc_size = 0;
             free_evt->ptr = RT_NULL;
-            
+
             QACTIVE_POST(&l_memoryAO.super, &free_evt->super, &l_memoryAO);
         }
-        
+
         cycle++;
         rt_thread_mdelay(100);
     }
-    
+
     rt_kprintf("Memory test thread exiting\n");
 }
 
@@ -182,50 +182,43 @@ static void memory_test_thread_func(void *parameter) {
 /*==========================================================================*/
 
 static QState MemoryAO_initial(MemoryAO * const me, QEvt const * const e) {
-    switch (e->sig) {
-        case Q_ENTRY_SIG: {
-            /* Subscribe to memory test signals */
-            QActive_subscribe(&me->super, MEMORY_START_SIG);
-            QActive_subscribe(&me->super, MEMORY_STOP_SIG);
-            return Q_HANDLED();
-        }
-        case Q_INIT_SIG: {
-            return Q_TRAN(&MemoryAO_idle);
-        }
-        default: {
-            return Q_SUPER(&QHsm_top);
-        }
-    }
+    Q_UNUSED_PAR(e);
+
+    /* Subscribe to memory test signals */
+    QActive_subscribe(&me->super, MEMORY_START_SIG);
+    QActive_subscribe(&me->super, MEMORY_STOP_SIG);
+
+    return Q_TRAN(&MemoryAO_idle);
 }
 
 static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Memory Test: Idle state\n");
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EXIT_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_INIT_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case MEMORY_START_SIG: {
             rt_kprintf("Memory Test: Starting memory performance test\n");
-            
+
             /* Reset measurement counters */
             me->alloc_count = 0;
             me->free_count = 0;
@@ -237,16 +230,16 @@ static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
             me->test_cycle = 0;
             g_memory_measurements = 0;
             g_stopLoadThreads = RT_FALSE;
-            
+
             /* Clear allocation tracker */
             alloc_tracker_index = 0;
-            
+
             /* Reset and start DWT cycle counter */
             PerfCommon_resetDWT();
-            
+
             /* Arm timeout timer (10 seconds) */
             QTimeEvt_armX(&me->timeEvt, 10 * 100, 0); /* 10 seconds */
-            
+
             /* Create memory test thread with smaller stack for embedded */
             memory_test_thread = rt_thread_create("mem_test",
                                                  memory_test_thread_func,
@@ -257,82 +250,82 @@ static QState MemoryAO_idle(MemoryAO * const me, QEvt const * const e) {
             if (memory_test_thread != RT_NULL) {
                 rt_thread_startup(memory_test_thread);
             }
-            
+
             status = Q_TRAN(&MemoryAO_testing);
             break;
         }
-        
+
         case MEMORY_STOP_SIG: {
             rt_kprintf("Memory Test: Stopping\n");
             status = Q_HANDLED();
             break;
         }
-        
+
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
         }
     }
-    
+
     return status;
 }
 
 static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
     QState status;
-    
+
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Memory Test: Testing state\n");
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EXIT_SIG: {
             QTimeEvt_disarm(&me->timeEvt);
             g_stopLoadThreads = RT_TRUE;
-            
+
             /* Free all tracked allocations */
             free_all_tracked();
-            
+
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_INIT_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case Q_EMPTY_SIG: {
             status = Q_HANDLED();
             break;
         }
-        
+
         case MEMORY_ALLOC_SIG: {
             MemoryEvt const *evt = (MemoryEvt const *)e;
-            
+
             /* Attempt to allocate memory */
             void *ptr = PerfCommon_malloc(evt->alloc_size);
-            
+
             if (ptr != RT_NULL) {
                 /* Successful allocation */
                 me->alloc_count++;
                 me->total_allocated += evt->alloc_size;
                 me->current_allocated += evt->alloc_size;
-                
+
                 if (me->current_allocated > me->max_allocated) {
                     me->max_allocated = me->current_allocated;
                 }
-                
+
                 /* Add to tracker */
                 add_to_tracker(ptr, evt->alloc_size);
-                
+
                 /* Write to memory to ensure it's accessible */
                 uint8_t *byte_ptr = (uint8_t *)ptr;
                 for (uint32_t i = 0; i < evt->alloc_size; i++) {
                     byte_ptr[i] = (uint8_t)(i & 0xFF);
                 }
-                
+
                 if (me->alloc_count % 10 == 0) {
                     rt_kprintf("Memory alloc %u: size=%u, current=%u\n",
                               me->alloc_count, evt->alloc_size, me->current_allocated);
@@ -342,63 +335,63 @@ static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
                 me->allocation_failures++;
                 rt_kprintf("Memory allocation failed: size=%u\n", evt->alloc_size);
             }
-            
+
             g_memory_measurements++;
             status = Q_HANDLED();
             break;
         }
-        
+
         case MEMORY_FREE_SIG: {
             /* Free a random allocation */
             if (alloc_tracker_index > 0) {
                 uint32_t index = me->test_cycle % alloc_tracker_index;
                 void *ptr = alloc_tracker[index].ptr;
-                
+
                 if (ptr != RT_NULL) {
                     uint32_t size = remove_from_tracker(ptr);
                     PerfCommon_free(ptr);
-                    
+
                     me->free_count++;
                     me->total_freed += size;
                     me->current_allocated -= size;
-                    
+
                     rt_kprintf("Memory free %u: size=%u, current=%u\n",
                               me->free_count, size, me->current_allocated);
                 }
             }
-            
+
             me->test_cycle++;
             status = Q_HANDLED();
             break;
         }
-        
+
         case MEMORY_MEASURE_SIG: {
             MemoryEvt const *evt = (MemoryEvt const *)e;
-            
+
             /* Process memory measurement */
             rt_kprintf("Memory measurement: alloc_size=%u, ptr=%p\n",
                       evt->alloc_size, evt->ptr);
-            
+
             status = Q_HANDLED();
             break;
         }
-        
+
         case MEMORY_TIMEOUT_SIG: {
             rt_kprintf("Memory Test: Timeout reached\n");
-            
+
             /* Set stop flag for memory test thread */
             g_stopLoadThreads = RT_TRUE;
-            
+
             /* Wait for thread to stop and then delete it */
             PerfCommon_waitForThreads();
             if (memory_test_thread != RT_NULL) {
                 rt_thread_delete(memory_test_thread);
                 memory_test_thread = RT_NULL;
             }
-            
+
             /* Free all tracked allocations */
             free_all_tracked();
-            
+
             /* Calculate and print results */
             rt_kprintf("=== Memory Test Results ===\n");
             rt_kprintf("Total allocations: %u\n", me->alloc_count);
@@ -409,37 +402,37 @@ static QState MemoryAO_testing(MemoryAO * const me, QEvt const * const e) {
             rt_kprintf("Current allocated: %u bytes\n", me->current_allocated);
             rt_kprintf("Allocation failures: %u\n", me->allocation_failures);
             rt_kprintf("Memory measurements: %u\n", g_memory_measurements);
-            
+
             status = Q_TRAN(&MemoryAO_idle);
             break;
         }
-        
+
         case MEMORY_STOP_SIG: {
             rt_kprintf("Memory Test: Stopping test\n");
             QTimeEvt_disarm(&me->timeEvt);
-            
+
             g_stopLoadThreads = RT_TRUE;
-            
+
             /* Wait for thread to stop and then delete it */
             PerfCommon_waitForThreads();
             if (memory_test_thread != RT_NULL) {
                 rt_thread_delete(memory_test_thread);
                 memory_test_thread = RT_NULL;
             }
-            
+
             /* Free all tracked allocations */
             free_all_tracked();
-            
+
             status = Q_TRAN(&MemoryAO_idle);
             break;
         }
-        
+
         default: {
             status = Q_SUPER(&QHsm_top);
             break;
         }
     }
-    
+
     return status;
 }
 
@@ -461,35 +454,24 @@ void MemoryTest_start(void) {
         rt_kprintf("Memory test already running\n");
         return;
     }
-    
-    /* Initialize common performance test infrastructure */
-    PerfCommon_initTest();
-    
-    /* Initialize only the memory event pool */
-    PerfCommon_initMemoryPool();
-    
-    /* Initialize QF if not already done - safe to call multiple times in RT-Thread */
-    QF_init();
-    
-    /* Construct the memory AO */
+
+    /* 只负责 AO 构造和启动，不再重复 QF/事件池初始化 */
     MemoryAO_ctor();
-    
-    /* Start the memory AO */
     QACTIVE_START(&l_memoryAO.super,
                   MEMORY_AO_PRIO,
                   memory_queueSto, Q_DIM(memory_queueSto),
                   memory_stack, sizeof(memory_stack),
                   (void *)0);
-    
+
     /* Initialize QF framework (returns immediately in RT-Thread) */
     QF_run();
-    
+
     /* Mark test as running */
     memory_test_running = RT_TRUE;
-    
+
     /* Send start signal */
     QACTIVE_POST(&l_memoryAO.super, Q_NEW(QEvt, MEMORY_START_SIG), &l_memoryAO);
-    
+
     rt_kprintf("Memory test started successfully\n");
 }
 
@@ -498,26 +480,26 @@ void MemoryTest_stop(void) {
         rt_kprintf("Memory test not running\n");
         return;
     }
-    
+
     /* Send stop signal */
     QACTIVE_POST(&l_memoryAO.super, Q_NEW(QEvt, MEMORY_STOP_SIG), &l_memoryAO);
-    
+
     /* Give time for stop signal to be processed */
     rt_thread_mdelay(200);
-    
+
     /* Unsubscribe from signals to prevent lingering subscriptions */
     QActive_unsubscribe(&l_memoryAO.super, MEMORY_START_SIG);
     QActive_unsubscribe(&l_memoryAO.super, MEMORY_STOP_SIG);
-    
+
     /* Mark test as stopped */
     memory_test_running = RT_FALSE;
-    
+
     /* Cleanup common infrastructure */
     PerfCommon_cleanupTest();
-    
+
     /* Print final results */
     PerfCommon_printResults("Memory", g_memory_measurements);
-    
+
     rt_kprintf("Memory test stopped successfully\n");
 }
 

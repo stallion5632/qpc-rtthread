@@ -1,371 +1,246 @@
-# QPC-RT-Thread Performance Test Suite
+# QPC-RT-Thread 自动化性能测试套件
 
-This directory contains a comprehensive performance test suite for the QPC (Quantum Platform for C) framework running on RT-Thread RTOS. The test suite is built using QPC Active Objects with proper signal handling, mutex protection, and MISRA C compliance.
+本目录包含运行在 RT-Thread RTOS 上的 QPC (Quantum Platform for C) 框架的全面自动化性能测试套件。测试套件解决了关键的性能测量问题，实现了线程安全、内存管理和测量精度的最佳实践。
 
-## Architecture Overview
+## 核心特性
 
-The performance test suite follows the QPC Active Object pattern with three main Active Objects:
+### 1. 自动化测试管理器 (`perf_test_manage.c`)
+- **自动序列执行**: 5个测试用例按顺序自动运行，无需手动干预
+- **统一初始化**: QF_init 和所有事件池只在管理器中初始化一次，避免重复导致的断言失败
+- **定时控制**: 基于 RT-Thread 定时器的精确测试切换
+- **Shell 命令集成**: 提供完整的命令行控制接口
 
-### Active Objects
+### 2. QPC 状态机规范化
+- **问题**: `(qep_hsm) assertion failed at function:, line number:220` 断言失败
+- **解决方案**:
+  - 修正所有 AO 初始状态函数，使用正确的 `void const * const par` 参数
+  - 移除冗余的信号处理逻辑，简化状态机结构
+  - 订阅操作在初始状态中完成，直接转换到运行状态
 
-1. **CounterAO** (`counter_ao.c`, `counter_ao.h`)
-   - Periodically updates a counter value every 100ms
-   - Publishes counter update events
-   - Tracks performance statistics
-   - Implements proper state transitions with Q_ENTRY_SIG and Q_EXIT_SIG handling
+### 3. 框架初始化防重复机制
+- **问题**: 多次调用 QF_init 导致状态机断言失败
+- **解决方案**:
+  - 集中式初始化：所有 QF_init 和事件池初始化在 `PerfTestManager_init` 中完成
+  - 各测试启动函数仅负责 AO 构造和启动
+  - 防重复机制确保初始化只执行一次
 
-2. **TimerAO** (`timer_ao.c`, `timer_ao.h`)
-   - Generates timer ticks every 100ms
-   - Implements a dedicated reporting state with proper transitions
-   - Reports system performance every 1 second
-   - Tracks elapsed time and generates periodic reports
-
-3. **LoggerAO** (`logger_ao.c`, `logger_ao.h`)
-   - Provides thread-safe logging using RT-Thread mutexes
-   - Supports multiple log levels (DEBUG, INFO, WARN, ERROR)
-   - Processes log events asynchronously
-   - Maintains log statistics with counters
-
-### Application Framework
-
-4. **App Main** (`app_main.c`, `app_main.h`)
-   - Ensures QF framework is initialized exactly once
-   - Guarantees Active Objects are started only once with clear state checks
-   - Provides RT-Thread MSH commands for test control
-   - Manages shared statistics with mutex protection
-
-5. **Board Support Package** (`bsp.c`, `bsp.h`)
-   - Hardware abstraction layer
-   - Performance monitoring using DWT cycle counter
-   - LED control simulation
-   - System information and memory management
-
-## Key Features Implemented
-
-### 1. Proper QP/C Framework Signal Handling
-- **Q_ENTRY_SIG, Q_EXIT_SIG, Q_INIT_SIG**: Properly handled in all state machines
-- **User Signals**: Well-defined signal ranges to prevent conflicts
-- **Signal Subscription**: Active Objects subscribe only to relevant signals
-- **Event Publishing**: Proper event publishing and consumption patterns
-
-### 2. Framework Initialization Guarantees
-- **QF Single Initialization**: `PerformanceApp_isQFInitialized()` ensures QF is initialized exactly once
-- **AO Single Start**: `PerformanceApp_areAOsStarted()` ensures Active Objects are started only once
-- **State Tracking**: Clear state checks prevent multiple initializations
-- **Resource Management**: Proper cleanup and state management
-
-### 3. TimerAO Reporting State Implementation
-- **Dedicated Reporting State**: `TimerAO_reporting` state for report generation
-- **Proper State Transitions**: Clean transitions between running and reporting states
-- **Report Generation**: Structured timer reports with statistics
-- **Transition Safety**: Proper handling of stop signals during reporting
-
-### 4. Mutex-Protected Logging
-- **RT-Thread Mutexes**: `g_log_mutex` for thread-safe console output
-- **Statistics Protection**: `g_stats_mutex` for shared data access
-- **Atomic Operations**: Safe counter updates and flag access
-- **Deadlock Prevention**: Consistent mutex ordering and timeout handling
-
-### 5. MISRA C Compliance
-- **Explicit Casting**: All type conversions are explicit
-- **No Magic Numbers**: All constants are properly defined
-- **Consistent Naming**: CamelCase for functions, snake_case for variables
-- **Bracket Style**: Consistent K&R bracket style
-- **Parameter Validation**: Null pointer checks and parameter validation
-- **Defensive Programming**: Default cases in switch statements
-
-## Signal Definitions
-
-```c
-enum PerformanceAppSignals {
-    /* Counter AO signals */
-    COUNTER_START_SIG = Q_USER_SIG,
-    COUNTER_STOP_SIG,
-    COUNTER_UPDATE_SIG,
-    COUNTER_TIMEOUT_SIG,
-    
-    /* Timer AO signals */
-    TIMER_START_SIG,
-    TIMER_STOP_SIG,
-    TIMER_TICK_SIG,
-    TIMER_REPORT_SIG,
-    TIMER_TIMEOUT_SIG,
-    
-    /* Logger AO signals */
-    LOGGER_LOG_SIG,
-    LOGGER_FLUSH_SIG,
-    LOGGER_TIMEOUT_SIG,
-    
-    /* Application control signals */
-    APP_START_SIG,
-    APP_STOP_SIG,
-    APP_RESET_SIG
-};
-```
-
-## Usage
-
-### RT-Thread MSH Commands
-
-```bash
-# Start the performance test
-perf_test_start_cmd
-
-# Stop the performance test
-perf_test_stop_cmd
-
-# Show performance statistics
-perf_test_stats_cmd
-
-# Reset performance statistics
-perf_test_reset_cmd
-```
-
-### Programmatic Interface
-
-```c
-#include "app_main.h"
-
-// Initialize the application
-PerformanceApp_init();
-
-// Start the performance test
-int result = PerformanceApp_start();
-
-// Get statistics
-PerformanceStats stats;
-PerformanceApp_getStats(&stats);
-
-// Stop the test
-PerformanceApp_stop();
-```
-
-### Thread-Safe Logging
-
-```c
-#include "logger_ao.h"
-
-// Thread-safe logging from any context
-LoggerAO_logInfo("Counter value: %u", counter_value);
-LoggerAO_logWarn("Performance warning detected");
-LoggerAO_logError("Critical error occurred");
-```
-
-## Performance Metrics
-
-The test suite tracks the following metrics:
-
-- **Counter Updates**: Number of counter increments
-- **Timer Ticks**: Number of timer tick events
-- **Timer Reports**: Number of performance reports generated
-- **Log Messages**: Total number of log messages processed
-- **Test Duration**: Elapsed time in milliseconds
-- **Test Status**: Current running state
-
-## Build Configuration
-
-The performance test suite requires the following RT-Thread configuration:
-
-```c
-#define PKG_USING_QPC                1
-#define RT_USING_MAILBOX            1
-#define RT_USING_FINSH              1
-#define RT_USING_MUTEX              1
-```
-
-## Safety Features
-
-### Memory Safety
-- **Event Pool Management**: Proper event allocation and deallocation
-- **Null Pointer Checks**: Defensive programming against null pointers
-- **Buffer Overflow Protection**: Safe string operations with bounds checking
-
-### Thread Safety
-- **Mutex Protection**: All shared data protected by mutexes
-- **Atomic Operations**: Safe access to simple data types
-- **Event-Driven Communication**: No direct shared memory between AOs
-
-### Resource Management
-- **Single Initialization**: Framework initialized exactly once
-- **Proper Cleanup**: Clean shutdown and resource deallocation
-- **State Management**: Clear state tracking and transitions
-
-## Testing and Validation
-
-The test suite provides comprehensive validation:
-
-1. **State Machine Testing**: All states and transitions are tested
-2. **Signal Handling**: Proper signal processing validation
-3. **Mutex Protection**: Thread safety verification
-4. **Resource Management**: Memory leak detection
-5. **Performance Monitoring**: Real-time performance metrics
-
-## Compatibility
-
-- **QPC Framework**: 7.2.0+
-- **RT-Thread**: 4.0+ with mutex and mailbox support
-- **ARM Cortex-M**: With DWT support for performance monitoring
-- **Build Systems**: SCons (RT-Thread standard)
-
-This performance test suite demonstrates best practices for QPC Active Object design with RT-Thread integration, emphasizing safety, reliability, and maintainability.
-
-## Features Implemented
-
-### 1. Unique Signal Definitions
-- **Problem**: Cross-test signal collisions causing unreliable measurements
-- **Solution**: Defined distinct `Q_USER_SIG` offsets for each test type:
+### 4. 独特信号定义防冲突
+- **解决方案**: 为每种测试类型定义独立的 `Q_USER_SIG` 偏移:
   - `LATENCY_*_SIG`: Q_USER_SIG + 0-9
   - `THROUGHPUT_*_SIG`: Q_USER_SIG + 10-19
   - `JITTER_*_SIG`: Q_USER_SIG + 20-29
   - `IDLE_CPU_*_SIG`: Q_USER_SIG + 30-39
   - `MEMORY_*_SIG`: Q_USER_SIG + 40-49
+  - `ISR_*_SIG`: Q_USER_SIG + 80-89
 
-### 2. Safe Event Timestamp Handling
-- **Problem**: Misuse of `poolId_` field for timestamps causing memory corruption
-- **Solution**: 
-  - Custom event structures (`LatencyEvt`, `ThroughputEvt`, etc.) with dedicated `timestamp` fields
-  - Proper DWT (Data Watchpoint and Trace) cycle counter initialization and reset
-  - Safe timestamp management at the start of each test
+### 5. 安全事件时间戳处理
+- **问题**: 误用 `poolId_` 字段存储时间戳导致内存损坏
+- **解决方案**:
+  - 自定义事件结构体 (`LatencyEvt`, `ThroughputEvt`, 等) 包含专用 `timestamp` 字段
+  - 正确的 DWT (Data Watchpoint and Trace) 周期计数器初始化和重置
+  - 每个测试开始时的安全时间戳管理
 
-### 3. Active Object Cleanup and Unique Priorities
-- **Problem**: Priority conflicts and lingering subscriptions between tests
-- **Solution**:
-  - Unique QP priorities assigned to each test AO (1-6)
-  - Proper unsubscription from signals at test completion
-  - Clean AO termination preventing resource leaks
+### 6. 活动对象清理和唯一优先级
+- **问题**: 优先级冲突和测试间残留订阅
+- **解决方案**:
+  - 为每个测试 AO 分配唯一的 QP 优先级 (1-9)
+  - 测试完成时正确取消信号订阅
+  - 清洁的 AO 终止防止资源泄漏
 
-### 4. Thread Synchronization and Termination
-- **Problem**: Unsafe thread deletion in timer callbacks causing crashes
-- **Solution**:
-  - `volatile` flags (`g_stopProducer`, `g_stopLoadThreads`) for safe cross-thread signaling
-  - Thread deletion moved to main test function after setting stop flags
-  - Proper delay (`PerfCommon_waitForThreads()`) before thread deletion
-  - Clean thread exit handling
+### 7. 线程同步和终止
+- **问题**: 定时器回调中不安全的线程删除导致崩溃
+- **解决方案**:
+  - `volatile` 标志 (`g_stopProducer`, `g_stopLoadThreads`) 安全的跨线程信号
+  - 线程删除移到主测试函数中设置停止标志后
+  - 线程删除前适当延迟 (`PerfCommon_waitForThreads()`)
+  - 清洁的线程退出处理
 
-### 5. Atomic Variable Visibility
-- **Problem**: Race conditions in shared variable access
-- **Solution**: Variables requiring atomic visibility declared `volatile`:
-  - `g_idle_count`
-  - `g_latency_measurements`
-  - `g_throughput_measurements`
-  - `g_jitter_measurements`
-  - `g_memory_measurements`
+## 测试类型
 
-## Test Types
+### 1. 延迟测试 (`latency_test.c`)
+使用带专用时间戳字段的自定义 `LatencyEvt` 结构测量事件处理延迟。测试从发布到处理的事件往返时间。
 
-### 1. Latency Test (`latency_test.c`)
-Measures event processing latency using custom `LatencyEvt` structures with dedicated timestamp fields. Tests event round-trip time from posting to processing.
+### 2. 吞吐量测试 (`throughput_test.c`)
+使用生产者-消费者模式和适当的线程同步测量系统吞吐量。测试负载下的事件处理速率。
 
-### 2. Throughput Test (`throughput_test.c`)
-Measures system throughput using producer-consumer pattern with proper thread synchronization. Tests event processing rate under load.
+### 3. 抖动测试 (`jitter_test.c`)
+使用负载线程引入实际系统压力测量周期事件中的时序抖动。测试变化负载条件下的时序一致性。
 
-### 3. Jitter Test (`jitter_test.c`)
-Measures timing jitter in periodic events using load threads to introduce realistic system stress. Tests timing consistency under varying load conditions.
+### 4. 空闲 CPU 测试 (`idle_cpu_test.c`)
+使用适当的空闲钩子机制测量 CPU 空闲时间和利用率。测试系统效率和资源使用。
 
-### 4. Idle CPU Test (`idle_cpu_test.c`)
-Measures CPU idle time and utilization using a proper idle hook mechanism. Tests system efficiency and resource usage.
+### 5. 内存测试 (`memory_test.c`)
+使用适当的跟踪和清理测量内存分配/释放性能。测试内存管理效率和泄漏检测。
 
-### 5. Memory Test (`memory_test.c`)
-Measures memory allocation/deallocation performance with proper tracking and cleanup. Tests memory management efficiency and leak detection.
+### 6. ISR 发布测试 (`isr_publishing_test.c`)
+测试 `QF_postFromISR` 和 `QF_publishFromISR` 路径性能，验证中断上下文的事件处理。
 
-## Architecture
+## 架构
 
-### Common Infrastructure (`perf_common.c/h`)
-- DWT cycle counter management
-- Event pool initialization and cleanup
-- Thread synchronization utilities
-- Memory management wrappers
-- Shared volatile variables
+### 自动化测试管理器 (`perf_test_manage.c`)
+- **统一控制**: 协调所有测试的启动、停止和切换
+- **定时管理**: 基于 RT-Thread 定时器的精确时序控制
+- **状态跟踪**: 跟踪当前运行的测试和整体进度
+- **Shell 集成**: 完整的命令行接口
 
-### Test Runner (`perf_test_suite.c`)
-- Unified test execution interface
-- Individual test control
-- Result reporting
-- RT-Thread MSH command integration
+### 公共基础设施 (`perf_common.c/h`)
+- DWT 周期计数器管理
+- 事件池初始化和清理
+- 线程同步工具
+- 内存管理包装器
+- 共享 volatile 变量
 
-## Usage
+## 使用方法
 
-### Individual Tests
+### 自动化测试套件 (推荐)
 ```c
-// Run individual tests
+// 初始化测试管理器 (仅需调用一次)
+PerfTestManager_init();
+
+// 启动自动化测试序列 - 所有5个测试将自动运行
+PerfTestManager_startAll();
+
+// 停止所有运行的测试
+PerfTestManager_stopAll();
+
+// 获取测试信息
+PerfTestManager_info();
+```
+
+### RT-Thread MSH 命令 (推荐使用方式)
+```bash
+# 启动完整自动化测试套件 (5个测试，每个5秒，总计25秒)
+perf_start_all
+
+# 停止所有测试
+perf_stop_all
+
+# 获取测试套件信息
+perf_info
+
+# 手动运行单个测试 (如需要)
+latency_start
+throughput_start
+jitter_start
+idle_cpu_start
+memory_start
+```
+
+### 单独测试控制 (高级用户)
+```c
+// 先初始化框架 (必须)
+PerfTestManager_init();
+
+// 然后运行单个测试
 LatencyTest_start();
 ThroughputTest_start();
 JitterTest_start();
 IdleCpuTest_start();
 MemoryTest_start();
+ISRPublishingTest_start();
 ```
 
-### Test Suite
+## 构建集成
+
+将性能测试添加到你的 RT-Thread 项目:
+
+1. 在构建路径中包含 `apps/performance_tests/` 目录
+2. 将源文件添加到你的 SConscript 或 Makefile
+3. 启用 RT-Thread FINSH/MSH 命令行界面
+4. 确保 QPC 框架正确集成
+5. 在 `main.c` 中调用:
+   ```c
+   int main(void) {
+       // RT-Thread 初始化...
+
+       // 初始化性能测试管理器
+       PerfTestManager_init();
+
+       // 可选：启动自动化测试
+       // PerfTestManager_startAll();
+
+       return 0;
+   }
+   ```
+
+## 关键修复和改进
+
+### 1. QPC 状态机断言修复
+根据 `examples\rt-thread\QPC_RTThread_Tech_Summary.md` 指导：
+- 修正初始状态函数签名：`void const * const par` 而非 `QEvt const * const e`
+- 简化状态处理：初始状态直接转换，无需复杂信号处理
+- 避免重复 QF_init：集中在管理器中初始化一次
+
+### 2. 防重复初始化机制
 ```c
-// Run all tests sequentially
-PerfTestSuite_runAll();
+void PerfTestManager_init(void) {
+    if (s_framework_initialized != 0U) {
+        return; // 防止重复初始化
+    }
 
-// Get test information
-PerfTestSuite_printInfo();
+    QF_init(); // 只初始化一次
+    // ... 事件池初始化
 
-// Stop all running tests
-PerfTestSuite_stopAll();
+    s_framework_initialized = 1U;
+}
 ```
 
-### RT-Thread MSH Commands
-```bash
-# Run all tests
-PerfTestSuite_runAll
+### 3. 自动化测试序列
+- 定时器驱动的自动切换机制
+- 每个测试运行5秒，总计25秒完成
+- 无需人工干预，结果自动报告
 
-# Run individual tests
-PerfTestSuite_runLatency
-PerfTestSuite_runThroughput
-PerfTestSuite_runJitter
-PerfTestSuite_runIdleCpu
-PerfTestSuite_runMemory
+## 安全特性
 
-# Stop all tests
-PerfTestSuite_stopAll
+- **内存安全**: 自定义事件结构防止 `poolId_` 误用
+- **线程安全**: Volatile 标志用于安全的跨线程通信
+- **资源清理**: 正确的取消订阅和线程终止
+- **隔离性**: 唯一优先级和信号范围防止跨测试干扰
+- **时序安全**: DWT 周期计数器初始化和重置确保准确测量
+- **状态机安全**: 正确的 QPC 初始状态函数实现，避免断言失败
 
-# Get help
-PerfTestSuite_printInfo
+## 实现的最佳实践
+
+1. **最小变更**: 针对特定问题的集中改进
+2. **线程安全**: 正确的同步和终止模式
+3. **内存安全**: 安全的事件处理和分配跟踪
+4. **测量精度**: 正确的时序基础设施和信号隔离
+5. **资源管理**: 清洁的启动/关闭过程
+6. **错误处理**: 优雅的故障处理和恢复
+7. **QPC 规范**: 遵循 QPC 框架的状态机编程最佳实践
+
+## 测试结果
+
+每个测试默认运行5秒并提供详细测量：
+- **延迟测试**: 最小/最大/平均延迟 (周期数)
+- **吞吐量测试**: 每周期包数，总处理数据量
+- **抖动测试**: 时序变化统计
+- **空闲 CPU**: CPU 利用率和空闲时间
+- **内存测试**: 分配模式和效率
+- **ISR 测试**: 中断路径性能和验证
+
+## 故障排除
+
+### QPC 状态机断言失败
 ```
+(qep_hsm) assertion failed at function:, line number:220
+```
+**解决**: 已修复所有初始状态函数，使用正确的函数签名和实现模式。
 
-## Build Integration
+### 重复初始化断言
+```
+(qf_dyn) assertion failed at function:, line number:201
+```
+**解决**: 集中式初始化机制确保 QF_init 和事件池只初始化一次。
 
-Add the performance test files to your RT-Thread project:
+### 测试间干扰
+**解决**: 独特的信号定义和优先级分配，清洁的资源管理。
 
-1. Include the `apps/performance_tests/` directory in your build path
-2. Add the source files to your SConscript or Makefile
-3. Enable RT-Thread FINSH/MSH for command-line interface
-4. Ensure QPC framework is properly integrated
+## 兼容性
 
-## Safety Features
-
-- **Memory Safety**: Custom event structures prevent `poolId_` misuse
-- **Thread Safety**: Volatile flags for safe cross-thread communication
-- **Resource Cleanup**: Proper unsubscription and thread termination
-- **Isolation**: Unique priorities and signal ranges prevent cross-test interference
-- **Timing Safety**: DWT cycle counter initialization and reset for accurate measurements
-
-## Best Practices Implemented
-
-1. **Minimal Changes**: Focused improvements addressing specific issues
-2. **Thread Safety**: Proper synchronization and termination patterns
-3. **Memory Safety**: Safe event handling and allocation tracking
-4. **Measurement Accuracy**: Proper timing infrastructure and signal isolation
-5. **Resource Management**: Clean startup/shutdown procedures
-6. **Error Handling**: Graceful failure handling and recovery
-
-## Testing
-
-Each test runs for 10 seconds by default and provides detailed measurements:
-- Latency: Min/Max/Average latency in cycles
-- Throughput: Packets per cycle, total data processed
-- Jitter: Timing variation statistics
-- Idle CPU: CPU utilization and idle time
-- Memory: Allocation patterns and efficiency
-
-## Compatibility
-
-- **QPC Framework**: 7.2.0+
+- **QPC 框架**: 7.2.0+
 - **RT-Thread**: 4.0+
-- **ARM Cortex-M**: With DWT support
-- **Build Systems**: SConscript, Makefile, IAR, Keil
+- **ARM Cortex-M**: 支持 DWT
+- **构建系统**: SConscript, Makefile, IAR, Keil
 
-This performance test suite provides a solid foundation for QPC-RT-Thread performance analysis while maintaining thread safety, memory safety, and measurement accuracy.
+这个自动化性能测试套件为 QPC-RT-Thread 性能分析提供了坚实的基础，同时保持线程安全、内存安全和测量精度。通过修复 QPC 状态机问题和实现自动化管理，现在可以可靠地运行完整的性能评估。

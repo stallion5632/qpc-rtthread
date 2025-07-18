@@ -1,7 +1,7 @@
 /*============================================================================
-* Product: Performance Tests Application - Main Header
+* Product: Performance Test Suite Application Main Header
 * Last updated for version 7.2.0
-* Last updated on  2024-12-19
+* Last updated on  2024-07-13
 *
 *                    Q u a n t u m  L e a P s
 *                    ------------------------
@@ -33,131 +33,132 @@
 #include <rtthread.h>
 
 /*==========================================================================*/
-/* Performance Test Application Constants */
+/* Application Configuration Constants */
 /*==========================================================================*/
-#define PERF_TEST_TIMEOUT_MS        (10000U)  /* 10 second test duration */
-#define COUNTER_UPDATE_INTERVAL_MS  (100U)    /* Counter update every 100ms */
-#define TIMER_REPORT_INTERVAL_MS    (1000U)   /* Timer report every 1 second */
+
+/* Queue sizes for each Active Object */
+#define COUNTER_QUEUE_SIZE    10U   /* Queue size for Counter AO */
+#define TIMER_QUEUE_SIZE      8U    /* Queue size for Timer AO */  
+#define LOGGER_QUEUE_SIZE     16U   /* Queue size for Logger AO */
+
+/* Number of subscription entries for publish-subscribe system */
+#define NUM_SUBSCRIPTIONS     32U   /* Total subscription table size */
+
+/* Maximum number of Active Objects in the system */
+#define MAX_ACTIVE_OBJECTS    8U    /* Maximum AOs that can be registered */
 
 /*==========================================================================*/
-/* Performance Test Signals */
+/* Application Signal Definitions */
 /*==========================================================================*/
-enum PerformanceAppSignals {
-    /* Counter AO signals */
-    COUNTER_START_SIG = Q_USER_SIG,
-    COUNTER_STOP_SIG,
-    COUNTER_UPDATE_SIG,
-    COUNTER_TIMEOUT_SIG,
 
-    /* Timer AO signals */
-    TIMER_START_SIG,
-    TIMER_STOP_SIG,
-    TIMER_TICK_SIG,
-    TIMER_REPORT_SIG,
-    TIMER_TIMEOUT_SIG,
-
-    /* Application control signals */
-    APP_START_SIG,
-    APP_STOP_SIG,
-    APP_RESET_SIG,
-
-    MAX_PERF_APP_SIG
+enum AppSignals {
+    /* Counter signals */
+    COUNTER_INCREMENT_SIG = Q_USER_SIG,  /* Signal to increment counter */
+    COUNTER_DECREMENT_SIG,               /* Signal to decrement counter */
+    COUNTER_RESET_SIG,                   /* Signal to reset counter */
+    COUNTER_GET_VALUE_SIG,               /* Signal to get counter value */
+    
+    /* Timer signals */
+    TIMER_START_SIG,                     /* Signal to start timer */
+    TIMER_STOP_SIG,                      /* Signal to stop timer */
+    TIMER_TIMEOUT_SIG,                   /* Signal for timer timeout */
+    TIMER_RESET_SIG,                     /* Signal to reset timer */
+    
+    /* Logger signals */
+    LOGGER_LOG_SIG,                      /* Signal to log message */
+    LOGGER_CLEAR_SIG,                    /* Signal to clear log */
+    LOGGER_FLUSH_SIG,                    /* Signal to flush log */
+    
+    /* Performance test signals */
+    PERF_TEST_START_SIG,                 /* Signal to start performance test */
+    PERF_TEST_STOP_SIG,                  /* Signal to stop performance test */
+    PERF_TEST_RESULT_SIG,                /* Signal for test results */
+    
+    MAX_APP_SIG                          /* Maximum signal value */
 };
 
 /*==========================================================================*/
-/* Performance Test Events */
+/* Application Event Structures */
 /*==========================================================================*/
 
-/* Structure for counter update event */
+/* Counter event structure with value parameter */
 typedef struct {
-    QEvt super;           /* Base event structure */
-    uint32_t counter_value; /* Value of the counter */
-    uint32_t timestamp;     /* Timestamp of the event (ms) */
-    uint32_t margin;
-} CounterUpdateEvt;
+    QEvt super;                          /* Base QEvt structure */
+    uint32_t value;                      /* Counter value or increment amount */
+    uint32_t timestamp;                  /* Event timestamp for performance tracking */
+} CounterEvt;
 
-/* Structure for timer tick event */
+/* Timer event structure with duration parameter */
 typedef struct {
-    QEvt super;           /* Base event structure */
-    uint32_t tick_count;  /* Number of timer ticks */
-    uint32_t timestamp;   /* Timestamp of the event (ms) */
-    uint32_t margin;
-} TimerTickEvt;
+    QEvt super;                          /* Base QEvt structure */
+    uint32_t duration_ms;                /* Timer duration in milliseconds */
+    uint32_t timer_id;                   /* Timer identifier for multiple timers */
+    uint32_t timestamp;                  /* Event timestamp for performance tracking */
+} TimerEvt;
 
-/* Structure for timer report event */
+/* Logger event structure with message data */
 typedef struct {
-    QEvt super;           /* Base event structure */
-    uint32_t elapsed_ms;  /* Elapsed time in milliseconds */
-    uint32_t tick_count;  /* Number of timer ticks */
-    uint32_t counter_value; /* Value of the counter at report */
-} TimerReportEvt;
+    QEvt super;                          /* Base QEvt structure */
+    char message[64];                    /* Log message string buffer */
+    uint8_t log_level;                   /* Log level (INFO, WARN, ERROR) */
+    uint32_t timestamp;                  /* Event timestamp for performance tracking */
+} LoggerEvt;
 
-/* Enumeration for performance test AO priorities */
-enum PerformanceAppPriorities {
-    TIMER_AO_PRIO   = 30U, /* Priority for Timer AO - higher priority */
-    COUNTER_AO_PRIO = 31U  /* Priority for Counter AO - lower priority */
-};
-
-/* Pointers to active object instances */
-extern QActive *AO_Counter; /* Counter AO instance pointer */
-extern QActive *AO_Timer;   /* Timer AO instance pointer */
-
-/* Mutex for thread-safe logging */
-extern rt_mutex_t g_log_mutex;
-/* Mutex for statistics access */
-extern rt_mutex_t g_stats_mutex;
-
-/* Structure for shared performance test statistics */
+/* Performance test event structure */
 typedef struct {
-    volatile uint32_t counter_updates;   /* Number of counter updates */
-    volatile uint32_t timer_ticks;       /* Number of timer ticks */
-    volatile uint32_t timer_reports;     /* Number of timer reports */
-    volatile uint32_t log_messages;      /* Number of log messages */
-    volatile uint32_t test_duration_ms;  /* Test duration in milliseconds */
-    volatile rt_bool_t test_running;     /* Test running status flag */
-} PerformanceStats;
+    QEvt super;                          /* Base QEvt structure */
+    uint32_t test_id;                    /* Test identifier */
+    uint32_t iteration_count;            /* Number of test iterations */
+    uint32_t result_data;                /* Test result data */
+    uint32_t timestamp;                  /* Event timestamp for performance tracking */
+} PerfTestEvt;
 
-extern PerformanceStats g_perf_stats; /* Global statistics instance */
+/*==========================================================================*/
+/* Global Subscription Table */
+/*==========================================================================*/
 
-/* Function to initialize the performance test application */
-void PerformanceApp_init(void);
+/* Global subscription storage for publish-subscribe system */
+extern QSubscrList subscriptions[MAX_APP_SIG];
 
-/* Function to start the performance test */
-int PerformanceApp_start(void);
+/*==========================================================================*/
+/* Application Initialization and Management Functions */
+/*==========================================================================*/
 
-/* Function to stop the performance test */
-void PerformanceApp_stop(void);
+/* Initialize the entire application framework */
+void app_main_init(void);
 
-/* Function to get current performance statistics */
-void PerformanceApp_getStats(PerformanceStats *stats);
+/* Start all Active Objects in the application */
+void app_main_start(void);
 
-/* Function to reset performance statistics */
-void PerformanceApp_resetStats(void);
+/* Stop all Active Objects gracefully */
+void app_main_stop(void);
 
-/* Function to check if QF framework is already initialized */
-rt_bool_t PerformanceApp_isQFInitialized(void);
+/* Check if application is properly initialized */
+rt_bool_t app_main_is_initialized(void);
 
-/* Function to check if Active Objects are already started */
-rt_bool_t PerformanceApp_areAOsStarted(void);
+/* Check if application is currently running */
+rt_bool_t app_main_is_running(void);
 
-/* BSP initialization function */
-void BSP_init(void);
-/* Function to get current timestamp in milliseconds */
-uint32_t BSP_getTimestampMs(void);
-/* Function to turn on the LED */
-void BSP_ledOn(void);
-/* Function to turn off the LED */
-void BSP_ledOff(void);
-/* Function to toggle the LED state */
-void BSP_ledToggle(void);
+/* Get application runtime statistics */
+void app_main_get_stats(void);
 
-/* RT-Thread MSH command: start performance test */
-int perf_test_start_cmd(int argc, char** argv);
-/* RT-Thread MSH command: stop performance test */
-int perf_test_stop_cmd(int argc, char** argv);
-/* RT-Thread MSH command: show performance test statistics */
-int perf_test_stats_cmd(int argc, char** argv);
-/* RT-Thread MSH command: reset performance test statistics */
-int perf_test_reset_cmd(int argc, char** argv);
+/*==========================================================================*/
+/* MSH Shell Command Functions */
+/*==========================================================================*/
+
+/* MSH command to initialize performance tests */
+void app_init_cmd(void);
+
+/* MSH command to start performance tests */
+void app_start_cmd(void);
+
+/* MSH command to stop performance tests */
+void app_stop_cmd(void);
+
+/* MSH command to show application status */
+void app_status_cmd(void);
+
+/* MSH command to show application statistics */
+void app_stats_cmd(void);
 
 #endif /* APP_MAIN_H_ */

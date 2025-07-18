@@ -44,6 +44,16 @@ extern void IdleCpuTest_stop(void);
 extern void MemoryTest_start(void);
 extern void MemoryTest_stop(void);
 
+/* New enhanced test function declarations */
+void PolicySwitchingTest_start(void);
+void PolicySwitchingTest_stop(void);
+void HierarchicalPriorityTest_start(void);
+void HierarchicalPriorityTest_stop(void);
+void BackpressureTest_start(void);
+void BackpressureTest_stop(void);
+void ISRPublishingTest_start(void);
+void ISRPublishingTest_stop(void);
+
 /*==========================================================================*/
 /* Performance Test Suite Functions */
 /*==========================================================================*/
@@ -52,42 +62,42 @@ void PerfTestSuite_runAll(void) {
     rt_kprintf("==================================================\n");
     rt_kprintf("Starting QPC-RT-Thread Performance Test Suite\n");
     rt_kprintf("==================================================\n\n");
-    
+
     /* Run Latency Test */
     rt_kprintf("### Running Latency Performance Test ###\n");
     LatencyTest_start();
     rt_thread_mdelay(1000); /* Wait 1 second between tests */
     LatencyTest_stop();
     rt_kprintf("\n");
-    
+
     /* Run Throughput Test */
     rt_kprintf("### Running Throughput Performance Test ###\n");
     ThroughputTest_start();
     rt_thread_mdelay(1000); /* Wait 1 second between tests */
     ThroughputTest_stop();
     rt_kprintf("\n");
-    
+
     /* Run Jitter Test */
     rt_kprintf("### Running Jitter Performance Test ###\n");
     JitterTest_start();
     rt_thread_mdelay(1000); /* Wait 1 second between tests */
     JitterTest_stop();
     rt_kprintf("\n");
-    
+
     /* Run Idle CPU Test */
     rt_kprintf("### Running Idle CPU Performance Test ###\n");
     IdleCpuTest_start();
     rt_thread_mdelay(1000); /* Wait 1 second between tests */
     IdleCpuTest_stop();
     rt_kprintf("\n");
-    
+
     /* Run Memory Test */
     rt_kprintf("### Running Memory Performance Test ###\n");
     MemoryTest_start();
     rt_thread_mdelay(1000); /* Wait 1 second between tests */
     MemoryTest_stop();
     rt_kprintf("\n");
-    
+
     rt_kprintf("==================================================\n");
     rt_kprintf("Performance Test Suite Completed\n");
     rt_kprintf("==================================================\n");
@@ -118,16 +128,40 @@ void PerfTestSuite_runMemory(void) {
     MemoryTest_start();
 }
 
+void PerfTestSuite_runPolicySwitching(void) {
+    rt_kprintf("Starting Policy Switching Performance Test...\n");
+    PolicySwitchingTest_start();
+}
+
+void PerfTestSuite_runHierarchicalPriority(void) {
+    rt_kprintf("Starting Hierarchical Priority Performance Test...\n");
+    HierarchicalPriorityTest_start();
+}
+
+void PerfTestSuite_runBackpressure(void) {
+    rt_kprintf("Starting Backpressure Performance Test...\n");
+    BackpressureTest_start();
+}
+
+void PerfTestSuite_runISRPublishing(void) {
+    rt_kprintf("Starting ISR Publishing Performance Test...\n");
+    ISRPublishingTest_start();
+}
+
 void PerfTestSuite_stopAll(void) {
     rt_kprintf("Stopping all performance tests...\n");
-    
+
     /* Stop all tests */
     LatencyTest_stop();
     ThroughputTest_stop();
     JitterTest_stop();
     IdleCpuTest_stop();
     MemoryTest_stop();
-    
+    PolicySwitchingTest_stop();
+    HierarchicalPriorityTest_stop();
+    BackpressureTest_stop();
+    ISRPublishingTest_stop();
+
     rt_kprintf("All performance tests stopped\n");
 }
 
@@ -141,6 +175,10 @@ void PerfTestSuite_printInfo(void) {
     rt_kprintf("  3. Jitter Test      - Measures timing jitter\n");
     rt_kprintf("  4. Idle CPU Test    - Measures CPU idle time\n");
     rt_kprintf("  5. Memory Test      - Measures memory allocation performance\n");
+    rt_kprintf("  6. Policy Switching Test - Measures policy switching impact\n");
+    rt_kprintf("  7. Hierarchical Priority Test - Validates priority staging\n");
+    rt_kprintf("  8. Backpressure Test - Tests smart backpressure handling\n");
+    rt_kprintf("  9. ISR Publishing Test - Tests ISR publishing paths\n");
     rt_kprintf("\n");
     rt_kprintf("Commands:\n");
     rt_kprintf("  PerfTestSuite_runAll()       - Run all tests\n");
@@ -149,6 +187,10 @@ void PerfTestSuite_printInfo(void) {
     rt_kprintf("  PerfTestSuite_runJitter()    - Run jitter test\n");
     rt_kprintf("  PerfTestSuite_runIdleCpu()   - Run idle CPU test\n");
     rt_kprintf("  PerfTestSuite_runMemory()    - Run memory test\n");
+    rt_kprintf("  PerfTestSuite_runPolicySwitching() - Run policy switching test\n");
+    rt_kprintf("  PerfTestSuite_runHierarchicalPriority() - Run hierarchical priority test\n");
+    rt_kprintf("  PerfTestSuite_runBackpressure() - Run backpressure test\n");
+    rt_kprintf("  PerfTestSuite_runISRPublishing() - Run ISR publishing test\n");
     rt_kprintf("  PerfTestSuite_stopAll()      - Stop all tests\n");
     rt_kprintf("  PerfTestSuite_printInfo()    - Print this information\n");
     rt_kprintf("==================================================\n");
@@ -163,6 +205,24 @@ MSH_CMD_EXPORT(PerfTestSuite_runThroughput, run throughput performance test);
 MSH_CMD_EXPORT(PerfTestSuite_runJitter, run jitter performance test);
 MSH_CMD_EXPORT(PerfTestSuite_runIdleCpu, run idle CPU performance test);
 MSH_CMD_EXPORT(PerfTestSuite_runMemory, run memory performance test);
+MSH_CMD_EXPORT(PerfTestSuite_runPolicySwitching, run policy switching test);
+MSH_CMD_EXPORT(PerfTestSuite_runHierarchicalPriority, run hierarchical priority test);
+MSH_CMD_EXPORT(PerfTestSuite_runBackpressure, run backpressure test);
+MSH_CMD_EXPORT(PerfTestSuite_runISRPublishing, run ISR publishing test);
 MSH_CMD_EXPORT(PerfTestSuite_stopAll, stop all performance tests);
 MSH_CMD_EXPORT(PerfTestSuite_printInfo, print performance test suite info);
+
+MSH_CMD_ALIAS(all1,  PerfTestSuite_runAll,             "run all perf tests");
+MSH_CMD_ALIAS(all2,  PerfTestSuite_stopAll,            "stop all tests");
+MSH_CMD_ALIAS(lat,   PerfTestSuite_runLatency,         "run latency test");
+MSH_CMD_ALIAS(tp,    PerfTestSuite_runThroughput,      "run throughput test");
+MSH_CMD_ALIAS(jit,   PerfTestSuite_runJitter,          "run jitter test");
+MSH_CMD_ALIAS(idle,  PerfTestSuite_runIdleCpu,         "run idle CPU test");
+MSH_CMD_ALIAS(mem,   PerfTestSuite_runMemory,          "run memory test");
+MSH_CMD_ALIAS(pol,   PerfTestSuite_runPolicySwitching, "run policy-switching test");
+MSH_CMD_ALIAS(prio,  PerfTestSuite_runHierarchicalPriority, "run prio test");
+MSH_CMD_ALIAS(bp,    PerfTestSuite_runBackpressure,    "run backpressure test");
+MSH_CMD_ALIAS(isr,   PerfTestSuite_runISRPublishing,   "run ISR-publish test");
+MSH_CMD_ALIAS(info,  PerfTestSuite_printInfo,          "print test suite info");
+
 #endif

@@ -43,27 +43,28 @@ enum PerformanceTestSignals {
     LATENCY_MEASURE_SIG,
     LATENCY_TIMEOUT_SIG,
     LATENCY_STOP_SIG,
-    
+    LATENCY_TEST_SIG,
+
     /* Throughput test signals */
     THROUGHPUT_START_SIG = Q_USER_SIG + 10,
     THROUGHPUT_SEND_SIG,
-    THROUGHPUT_RECV_SIG, 
+    THROUGHPUT_RECV_SIG,
     THROUGHPUT_TIMEOUT_SIG,
     THROUGHPUT_STOP_SIG,
-    
+
     /* Jitter test signals */
     JITTER_START_SIG = Q_USER_SIG + 20,
     JITTER_MEASURE_SIG,
     JITTER_TIMER_SIG,
     JITTER_TIMEOUT_SIG,
     JITTER_STOP_SIG,
-    
+
     /* Idle CPU test signals */
     IDLE_CPU_START_SIG = Q_USER_SIG + 30,
     IDLE_CPU_MEASURE_SIG,
     IDLE_CPU_TIMEOUT_SIG,
     IDLE_CPU_STOP_SIG,
-    
+
     /* Memory test signals */
     MEMORY_START_SIG = Q_USER_SIG + 40,
     MEMORY_ALLOC_SIG,
@@ -71,7 +72,7 @@ enum PerformanceTestSignals {
     MEMORY_MEASURE_SIG,
     MEMORY_TIMEOUT_SIG,
     MEMORY_STOP_SIG,
-    
+
     MAX_PERF_SIG
 };
 
@@ -84,7 +85,7 @@ typedef struct {
     QEvt super;
     uint32_t timestamp;     /* dedicated timestamp field */
     uint32_t sequence_id;   /* for tracking event order */
-} LatencyEvt;
+} __attribute__((aligned(RT_ALIGN_SIZE))) LatencyEvt;
 
 /* Custom event structure for throughput measurements */
 typedef struct {
@@ -92,7 +93,7 @@ typedef struct {
     uint32_t timestamp;
     uint32_t data_size;
     uint32_t packet_id;
-} ThroughputEvt;
+} __attribute__((aligned(RT_ALIGN_SIZE))) ThroughputEvt;
 
 /* Custom event structure for jitter measurements */
 typedef struct {
@@ -100,14 +101,14 @@ typedef struct {
     uint32_t timestamp;
     uint32_t expected_time;
     uint32_t actual_time;
-} JitterEvt;
+} __attribute__((aligned(RT_ALIGN_SIZE))) JitterEvt;
 
 /* Custom event structure for idle CPU measurements */
 typedef struct {
     QEvt super;
     uint32_t timestamp;
     uint32_t idle_count;
-} IdleCpuEvt;
+} __attribute__((aligned(RT_ALIGN_SIZE))) IdleCpuEvt;
 
 /* Custom event structure for memory measurements */
 typedef struct {
@@ -115,7 +116,7 @@ typedef struct {
     uint32_t timestamp;
     uint32_t alloc_size;
     void *ptr;
-} MemoryEvt;
+} __attribute__((aligned(RT_ALIGN_SIZE))) MemoryEvt;
 
 /*==========================================================================*/
 /* Performance Test Priorities - Unique QP priorities for each test AO */
@@ -128,7 +129,7 @@ enum PerformanceTestPriorities {
     JITTER_AO_PRIO = 4,
     IDLE_CPU_AO_PRIO = 5,
     MEMORY_AO_PRIO = 6,
-    
+
     /* Load test threads - lower priority */
     LOAD_THREAD_PRIO = 10
 };
@@ -167,6 +168,9 @@ void PerfCommon_initDWT(void);
 void PerfCommon_resetDWT(void);
 uint32_t PerfCommon_getDWTCycles(void);
 
+/* Convenience macro for cycle count */
+#define PerfCommon_getCycleCount() PerfCommon_getDWTCycles()
+
 /* Performance test utility functions */
 void PerfCommon_initTest(void);
 void PerfCommon_cleanupTest(void);
@@ -188,5 +192,11 @@ void PerfCommon_cleanupEventPools(void);
 /* Memory management utilities */
 void* PerfCommon_malloc(rt_size_t size);
 void PerfCommon_free(void *ptr);
+
+#define MSH_CMD_ALIAS(alias, realFunc, helpString)   \
+    static void alias() {      \
+        realFunc();                        \
+    }                                                 \
+    MSH_CMD_EXPORT(alias, helpString)
 
 #endif /* PERF_COMMON_H_ */
