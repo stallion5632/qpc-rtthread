@@ -68,10 +68,10 @@ void QF_stop(void) {
 /*..........................................................................*/
 static void thread_function(void *parameter) { /* RT-Thread signature */
     QActive *act = (QActive *)parameter;
-
+#ifdef Q_RT_DEBUG
     rt_kprintf("[thread_function] AO thread started: %p, name: %s, prio: %d, stat: %d\n",
                act, rt_thread_self()->name, rt_thread_self()->current_priority, rt_thread_self()->stat);
-
+#endif /* Q_RT_DEBUG */
     /* event-loop */
     for (;;) { /* for-ever */
         QEvt const *e = QActive_get_(act);
@@ -99,9 +99,10 @@ void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
     QActive_register_(me); /* register this AO */
     QHSM_INIT(&me->super, par, me->prio); /* initial tran. (virtual) */
     QS_FLUSH(); /* flush the trace buffer to the host */
+#ifdef Q_RT_DEBUG
     rt_kprintf("[QActive_start_] AO: %p, name: %s, registered, QHSM: %p\n",
         me, me->thread.name ? me->thread.name : "NULL", me);
-
+#endif /* Q_RT_DEBUG */
     Q_ALLEGE_ID(220,
         rt_thread_init(
             &me->thread, /* RT-Thread thread control block */
@@ -114,7 +115,13 @@ void QActive_start_(QActive * const me, QPrioSpec const prioSpec,
             5)
         == RT_EOK);
     rt_err_t startup_result = rt_thread_startup(&me->thread);
+#ifdef Q_RT_DEBUG
     rt_kprintf("[QActive_start_] Thread startup result: %d, state: %d\n", startup_result, me->thread.stat);
+#else
+    if (startup_result != RT_EOK) {
+        Q_ERROR_ID(521); /* thread startup failed */
+    }
+#endif /* Q_RT_DEBUG */
 }
 /*..........................................................................*/
 void QActive_setAttr(QActive *const me, uint32_t attr1, void const *attr2) {
@@ -148,12 +155,16 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
         }
         else {
             status = false; /* cannot post */
+#ifdef Q_RT_DEBUG
             rt_kprintf("[QPC][ERROR] AO event queue full, event drop! AO=%p, sig=%u\n", me, e->sig);
             #if (QF_MAX_EPOOL > 0U)
             QF_gc(e);
             #endif
             QF_CRIT_X_();
             return false;
+#else
+            Q_ERROR_ID(510); /* must be able to post the event */
+#endif /* Q_RT_DEBUG */
         }
     }
     else if (nFree > (QEQueueCtr)margin) {

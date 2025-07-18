@@ -1,487 +1,141 @@
 ![QP Framework](doxygen/images/qp_banner.jpg)
 
-# QP/C for RT-Thread
+# QPC-RTThread 端口（QP/C on RT-Thread）
 
-This is a specialized port of the QP/C framework for RT-Thread RTOS with advanced dispatcher optimizations and unified event handling.
+QPC-RTThread 是基于 Quantum Leaps QP/C 实时事件框架的 RT-Thread 操作系统移植包。它将 QP/C 的事件驱动、Active Object（AO）和层级状态机模型，融入 RT-Thread 的高效调度环境，为嵌入式应用提供轻量、响应式且可维护的架构。
 
-## Key Features
 
-### 1. Advanced Dispatcher Architecture
-- **Strategy Pattern**: Configurable dispatch strategies for different use cases
-- **Priority-based Staging**: Multi-level priority queues (HIGH, NORMAL, LOW)
-- **Smart Backpressure**: Intelligent retry and drop policies
-- **Event Merging**: Automatic consolidation of similar events
-- **Runtime Monitoring**: Comprehensive metrics and diagnostics
+## 1. 关于 QP/C 实时事件框架
 
-### 2. Unified Event Handling Channel
-All events from interrupt service routines (ISR) follow a single, safe, and efficient processing path:
+QP/C（Quantum Platform in C）是一款轻量级、开源的软件框架／RTOS，用于构建由事件驱动的 Active Objects（演员对象）协同工作的实时嵌入式系统。它支持 UML 层级状态机规范，能够在裸机或多种 RTOS 上实现确定性执行。
 
-```
-ISR Event → Priority-based Staging Buffer → Dispatcher Thread → AO Mailbox → Target AO Thread
-```
+### QP 框架家族
 
-### 3. Zero-Copy Event Passing
-Events are passed as pointers through the staging buffer without data copying, ensuring efficient memory usage.
+- QP/C
+  语言：C (C11)
+  许可：GPLv3 / 商业闭源
+- QP/C++
+  语言：C++ (C++17)
+  许可：GPLv3 / 商业闭源
+- SafeQP/C
+  语言：C (C11)
+  特性：全套安全功能、认证工具包
+  许可：商业闭源
+- SafeQP/C++
+  语言：C++ (C++17)
+  特性：全套安全功能、认证工具包
+  许可：商业闭源
 
-### 4. Batch Processing for High-Frequency Interrupts
-The dispatcher thread processes multiple events in batches to minimize context switching overhead.
+> 查看 QP/C 更新日志：https://www.state-machine.com/qpc/history.html
 
-## Event Flow Architecture
 
-### Normal Thread Context Events
-```
-Application Thread → QActive_post_() → RT-Thread Mailbox → Target AO Thread
-```
+## 2. QPC-RTThread 特性
 
-### ISR Context Events (Advanced)
-```
-ISR → QF_postFromISR() → Strategy-based Priority Classification → 
-      Priority Staging Buffer → Dispatcher Thread → 
-      Event Processing (Merge/Drop/Retry) → RT-Thread Mailbox → Target AO Thread
-```
+- 支持 QP/C 最新稳定版本
+- 集成 RT-Thread 4.x 内核，兼容 ARM Cortex-M0/M3/M4/M7/A
+- 基于 Active Object 模式的模块化任务管理
+- 丰富的事件队列、时间事件（Time Event）和多端口消息传递
+- 动态与静态内存配置选项，减少运行时开销
+- 提供事件分级、批量分发、零拷贝及运行时监控等优化层
+- 简单易用的 API，与现有 RT-Thread 驱动无缝集成
 
-## Advanced Features
 
-### 1. Dispatcher Strategy Interface
+## 3. 仓库结构
 
-The dispatcher supports pluggable strategies for different performance and reliability requirements:
-
-```c
-typedef struct {
-    bool (*shouldMerge)(QEvt const *prev, QEvt const *next);
-    int (*comparePriority)(QEvt const *a, QEvt const *b);
-    bool (*shouldDrop)(QEvt const *evt, QActive const *targetAO);
-    QF_PrioLevel (*getPrioLevel)(QEvt const *evt);
-} QF_DispatcherStrategy;
-```
-
-**Available Strategies:**
-- **Default Strategy**: Conservative approach, merges same-signal events
-- **High Performance Strategy**: Aggressive optimization with intelligent dropping
-
-### 2. Extended Event Metadata
-
-Enhanced event structure with additional metadata:
-
-```c
-typedef struct {
-    QEvt super;                 /* Base event structure */
-    uint32_t timestamp;         /* Event arrival timestamp */
-    uint8_t priority;           /* Event priority (0-255) */
-    uint8_t flags;              /* Event flags */
-    uint8_t retryCount;         /* Retry count for backpressure */
-    uint8_t reserved;           /* Reserved for future use */
-} QEvtEx;
+```text
+qpc-rtthread/
+├── 3rd_party/           # 第三方依赖与适配
+├── apps/                # 性能测试与基准
+├── doxygen/             # API 文档与示例图
+├── examples/            # QP/C + RT-Thread 工程模板
+├── include/             # QPC 公共头文件
+├── ports/               # RT-Thread 移植层与优化层
+│   └── rt-thread/
+│       ├── bsp/         # 板级支持包示例
+│       ├── include/     # 移植层头文件
+│       ├── src/         # 移植层实现
+│       └── toolchain.cmake
+├── src/                 # QPC 核心源码
+├── test/                # 单元测试与验证
+├── LICENSE              # MIT 许可（QP/C 双授权另见原仓库）
+└── README.md            # 本说明文档
 ```
 
-**Event Flags:**
-- `QF_EVT_FLAG_MERGEABLE`: Event can be merged with similar events
-- `QF_EVT_FLAG_CRITICAL`: High-priority event
-- `QF_EVT_FLAG_NO_DROP`: Event must not be dropped (retry instead)
-
-### 3. Priority-based Staging Buffers
-
-Three-level priority system:
-- **HIGH**: Critical events, processed first
-- **NORMAL**: Standard events
-- **LOW**: Low-priority events and retries
-
-### 4. Smart Backpressure Handling
-
-When AO mailboxes are full:
-1. **Retry Logic**: Events marked with `QF_EVT_FLAG_NO_DROP` are retried
-2. **Intelligent Dropping**: Non-critical events are dropped when queues are 80% full
-3. **Priority Demotion**: Failed events are moved to lower priority queues
-
-### 5. Runtime Monitoring and Diagnostics
-
-Comprehensive metrics collection:
-
-```c
-typedef struct {
-    uint32_t dispatchCycles;        /* Number of dispatch cycles */
-    uint32_t eventsProcessed;       /* Total events processed */
-    uint32_t eventsMerged;          /* Events merged */
-    uint32_t eventsDropped;         /* Events dropped */
-    uint32_t eventsRetried;         /* Events retried */
-    uint32_t maxBatchSize;          /* Maximum batch size */
-    uint32_t avgBatchSize;          /* Average batch size */
-    uint32_t maxQueueDepth;         /* Maximum queue depth */
-    uint32_t postFailures;          /* Failed post attempts */
-    uint32_t stagingOverflows[3];   /* Overflows per priority level */
-} QF_DispatcherMetrics;
-```
-
-## Configuration Options
-
-### Dispatcher Configuration
-```c
-#define QF_STAGING_BUFFER_SIZE      32U     // Staging buffer size per priority
-#define QF_DISPATCHER_STACK_SIZE    2048U   // Dispatcher thread stack size
-#define QF_DISPATCHER_PRIORITY      0U      // Dispatcher thread priority
-#define QF_MAX_RETRY_COUNT          3U      // Maximum retry attempts
-```
-
-### Event Pool Configuration
-```c
-// Recommended pool sizes for advanced features
-QF_poolInit(basicEventPool, sizeof(basicEventPool), sizeof(QEvt));      // 50 events
-QF_poolInit(extendedEventPool, sizeof(extendedEventPool), sizeof(QEvtEx)); // 60 events
-```
-
-## Shell Commands
-
-The following commands are available in the RT-Thread shell for monitoring and control:
-
-```bash
-qf_metrics      # Display dispatcher metrics
-qf_aos          # Display Active Object status
-qf_strategy     # Set dispatcher strategy (default|highperf)
-qf_reset        # Reset dispatcher metrics
-qf_opt          # Enable/disable optimization layer
-qf_help         # Display help information
-```
-
-## Usage Examples
-
-### 1. Creating Extended Events
-
-```c
-// Create high-priority critical event
-QEvtEx *evt = QF_newEvtEx(CRITICAL_SIG, sizeof(QEvtEx), 255, 
-                         QF_EVT_FLAG_CRITICAL | QF_EVT_FLAG_NO_DROP);
-QACTIVE_POST(ao, (QEvt *)evt, 0);
-
-// Create mergeable event
-QEvtEx *evt = QF_newEvtEx(DATA_SIG, sizeof(QEvtEx), 100, QF_EVT_FLAG_MERGEABLE);
-QACTIVE_POST(ao, (QEvt *)evt, 0);
-```
-
-### 2. Switching Dispatcher Strategies
-
-```c
-// Use high performance strategy
-QF_setDispatcherStrategy(&QF_highPerfStrategy);
-
-// Use default strategy
-QF_setDispatcherStrategy(&QF_defaultStrategy);
-```
-
-### 3. Monitoring Performance
-
-```c
-// Get current metrics
-QF_DispatcherMetrics const *metrics = QF_getDispatcherMetrics();
-rt_kprintf("Events processed: %lu\n", metrics->eventsProcessed);
-rt_kprintf("Events merged: %lu\n", metrics->eventsMerged);
-rt_kprintf("Events dropped: %lu\n", metrics->eventsDropped);
-```
-
-## Sequence Diagram (Advanced)
-
-```
-ISR                 Priority Staging    Dispatcher Thread    Target AO Thread
- |                       |                    |                 |
- |--[Event Pointer]----->|                    |                 |
- |                       |                    |                 |
- |--[Signal Semaphore]-->|                    |                 |
- |                       |                    |                 |
- |                       |<--[Wait for Sem]---|                 |
- |                       |                    |                 |
- |                       |--[Batch Events]--->|                 |
- |                       |                    |                 |
- |                       |                    |--[Apply Strategy]|
- |                       |                    |                 |
- |                       |                    |--[Merge Events]--|
- |                       |                    |                 |
- |                       |                    |--[Post Event]-->|
- |                       |                    |                 |
- |                       |                    |                 |--[Process Event]
-```
-
-## Demo Application
-
-Run the advanced dispatcher demo:
-
-```bash
-demo_start      # Start the advanced dispatcher demonstration
-```
-
-This demo showcases:
-- Multi-priority event generation
-- Strategy switching during runtime
-- Event merging and dropping
-- Real-time metrics monitoring
-- Backpressure handling
-
-## Performance Considerations
-
-### Memory Usage
-- **Staging Buffers**: 3 × `QF_STAGING_BUFFER_SIZE` × 12 bytes
-- **Dispatcher Stack**: `QF_DISPATCHER_STACK_SIZE` bytes
-- **Metrics**: ~80 bytes
-
-### CPU Overhead
-- **Batch Processing**: Reduces context switches by 60-80%
-- **Event Merging**: Reduces event processing by 20-40% (application dependent)
-- **Priority Scheduling**: Adds ~10μs per event for classification
-
-### Real-time Characteristics
-- **Deterministic**: Maximum processing time bounded by batch size
-- **Priority Inversion**: Eliminated through priority-based staging
-- **Interrupt Latency**: Minimal ISR execution time (~2-5μs)
-
-## Safety Features
-
-1. **Overflow Protection**: Staging buffers prevent overflow with metrics tracking
-2. **Critical Event Handling**: Critical events are never dropped
-3. **Graceful Degradation**: System continues operation under high load
-4. **Monitoring**: Real-time visibility into system behavior
-5. **Configurable Policies**: Adaptable to different system requirements
-
-## Industrial Applications
-
-This implementation is suitable for:
-- **High-frequency sensor data processing**
-- **Real-time control systems**
-- **Communication protocol stacks**
-- **IoT gateway applications**
-- **Industrial automation systems**
-
-The advanced dispatcher provides industrial-grade reliability and performance while maintaining the simplicity and elegance of the QP/C framework.
-
-## Configuration
-
-### Staging Buffer Size
-```c
-#define QF_STAGING_BUFFER_SIZE 32U  // Configurable via qf_port.h
-```
-
-### Dispatcher Thread Priority
-```c
-#define QF_DISPATCHER_PRIORITY 0U   // Highest priority for real-time processing
-```
-
-### Dispatcher Strategy Management
-
-The dispatcher supports pluggable strategies for different performance characteristics:
-
-```c
-// Set dispatcher strategy
-QF_setDispatcherStrategy(&QF_defaultStrategy);      // Default strategy
-QF_setDispatcherStrategy(&QF_highPerfStrategy);     // High performance strategy
-
-// Get current strategy
-QF_DispatcherStrategy const *current = QF_getDispatcherPolicy();
-```
-
-### Strategy Differences
-
-| Feature | Default Strategy | High Performance Strategy |
-|---------|------------------|---------------------------|
-| **Event Merging** | Merges events with same signal | Merges only explicitly marked mergeable events |
-| **Priority Sorting** | Compares by signal value | Uses explicit event priority levels |
-| **Event Dropping** | Never drops events | Drops non-critical events when queue >80% full |
-| **Priority Mapping** | All events → normal priority | Maps to HIGH/NORMAL/LOW based on event flags |
-| **Use Case** | General purpose, safe | High-throughput systems with explicit event prioritization |
-
-### Strategy Configuration Examples
-
-**Default Strategy (Safe):**
-```c
-QF_setDispatcherStrategy(&QF_defaultStrategy);
-// - Preserves all events
-// - Simple merging by signal
-// - Good for general applications
-```
-
-**High Performance Strategy (Optimized):**
-```c
-QF_setDispatcherStrategy(&QF_highPerfStrategy);
-// - Intelligent event dropping
-// - Priority-based processing
-// - Optimized for high-frequency events
-// - Requires explicit event prioritization
-```
-
-## Safety Features
-
-- **Atomic Operations**: All staging buffer operations use atomic instructions
-- **Overflow Protection**: Lost event counter tracks buffer overflow conditions
-- **ISR-Safe**: All ISR functions use RT-Thread's ISR-safe primitives
-- **No Fast-Path Dispatch**: Eliminates race conditions from direct ISR dispatch
-
-## Performance Benefits
-
-1. **Reduced Context Switching**: Batch processing minimizes thread context switches
-2. **Predictable Latency**: Unified event path provides consistent timing
-3. **Memory Efficiency**: Zero-copy event passing reduces memory overhead
-4. **Scalability**: Handles high-frequency interrupt scenarios efficiently
-
-## Usage
-
-Initialize the optimization layer during system startup:
-```c
-QF_init();
-QF_run();  // Automatically initializes the unified event handling
-```
-
-Post events from ISR:
-```c
-void my_isr_handler(void) {
-    QEvt const *e = Q_NEW(MyEvt, MY_SIGNAL);
-    QF_postFromISR(target_ao, e);  // Safe ISR posting
-}
-```
-
-## Thread Safety
-
-The implementation ensures thread safety through:
-- RT-Thread critical sections for shared data
-- Atomic operations for staging buffer indices
-- ISR-safe semaphore operations
-- Proper reference counting for dynamic events
-
-# Original QP/C Documentation
-
-The sections below contain the original QP/C documentation.
-
-# What's New?
-
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/QuantumLeaps/qpc)](https://github.com/QuantumLeaps/qpc/releases/latest)
-
-View QP/C Revision History at: https://www.state-machine.com/qpc/history.html
-
-> **NOTE:** If you're interested in the latest QP/C version from GitHub,
-it is recommened that you clone this repo like that:
-
-```
-git clone https://github.com/QuantumLeaps/qpc --recurse-submodules --depth 1
-```
-
-Alternatively, you can also download the latest
-[QP/C Release](https://github.com/QuantumLeaps/qpc/releases).
-
-
-# Getting Started with QP/C
-The most recommended way of obtaining QP/C is by downloading the
-[QP-bundle](https://www.state-machine.com/#Downloads), which includes QP/C
-as well as the QM modeling tool and the QTools collection. The main advantage of
-obtaining QP/C bundled together like that is that you get all components,
-tools and examples ready to go.
-
-### Getting Started Resources
-- ["QP/C Tutorial"][Tutorial]
-describes a series of progressively advanced QP/C example applications.
-
-- [Video: "Getting Started with QP Real-Time Embedded Frameworks"][Video]
-provides instructions on how to download, install, and get started with QP.
-
-- [AppNote: "Getting Started with QP Real-Time Embedded Frameworks"][AN]
-contains also a tutorial, in which you build a simple "Blinky" application.
-
-
-# About QP/C
-QP/C (Quantum Platform in C) is a lightweight, open source
-[Real-Time Embedded Framework (RTEF)][RTEF] for building modern embedded
-software as systems of asynchronous, event-driven [active objects][Active]
-(actors). The [QP/C] framework is a member of a [QP] family consisting of
-[QP/C] and [QP/C++] frameworks, which are strictly quality controlled,
-thoroughly documented, and [commercially licensable][Lic].
-
-## Safer Model of Concurrency
-The [QP] framework family is based on the [Active Object][Active] (**actor**)
-design pattern, which inherently supports and automatically enforces the
-following best practices of concurrent programming:
-
-- Keep data isolated and bound to active objects' threads. Threads should
-hide (**encapsulate**) their private data and other resources, and not
-share them with the rest of the system.
-
-- Communicate among active object threads **asynchronously** via event
-objects. Using asynchronous events keeps the threads running truly
-independently, **without blocking** on each other.
-
-- Active object threads should spend their lifetime responding to incoming
-events, so their mainline should consist of an **event-loop** that handles
-events one at a time (to completion), thus avoiding any concurrency hazards
-within an active object thread itself.
-
-This architecture is generally **safer**, more responsive and easier to
-understand and maintain than the shared-state concurrency of a conventional
-RTOS. It also provides higher level of abstraction and the *correct*
-abstractions to effectively apply **modeling** and **code generation** to
-deeply embedded real-time systems.
-
-## Hierarchical State Machines
-The behavior of active objects is specified in QP/C by means of
-[Hierarchical State Machines][HSM] (UML statecharts). The framework
-supports manual coding of UML state machines in C as well as automatic
-**code generation** by means of the free [QM modeling tool][QM].
-
-## Built-in Real-Time Kernels
-The QP/C framework can run on bare-metal single-chip microcontrollers,
-completely replacing a traditional RTOS. The framework contains a selection
-of **built-in real-time kernels**, such as the cooperative QV kernel, the
-preemptive non-blocking QK kernel, and the preemptive, blocking QXK kernel
-that provides all the features you might expect from a traditional RTOS.
-Native QP ports and ready-to-use examples are provided for major CPUs, such
-as ARM Cortex-M (M0/M0+/M3/M4/M7).
-
-## Traditional RTOS/OS
-QP/C can also work with a traditional RTOS, such as ThreadX, FreeRTOS, embOS,
-uC/OS-II and TI-RTOS, as well as with (embedded) Linux (POSIX) and Windows.
-
-## Popularity and Maturity
-With 20 years of continuous development, over [350 commercial licensees][Cust],
-and many times more open source users worldwide, the QP� frameworks are the
-most popular such offering on the market. They power countless electronic
-products ranging from implantable medical devices to complex weapon systems.
-
-
-# QP/C Licensing
-QP/C is licensed under the sustainable [dual licensing model][Lic],
-in which both the open source software distribution mechanism and
-traditional closed source software distribution models are combined.
-
-> **NOTE:** If your company has a policy forbidding open source in your
-product, all QP frameworks can be [licensed commercially][Lic], in which case
-you don't use any open source license and you do not violate your policy.
-
-
-# QP/C Documentation
-The online HTML documention for the **latest** version of QP/C is located
-at: https://www.state-machine.com/qpc
-
-The offline HTML documentation for **this** particular version of QP/C
-is located in the sub-folder [html](html). To view the offline documentation,
-open the file [html/index.html](html/index.html) in your web browser.
-
-
-# How to Get Help?
-- [Free Support Forum](https://sourceforge.net/p/qpc/discussion/668726)
-- [Bug Reports](https://sourceforge.net/p/qpc/bugs/)
-- [Feature Requests](https://sourceforge.net/p/qpc/feature-requests/)
-- [Quantum Leaps website](https://www.state-machine.com)
-- [Quantum Leaps licensing](https://www.state-machine.com/licensing)
-- [info@state-machine.com](mailto:info@state-machine.com)
-
-
-# How to Help this Project?
-If you like this project, please give it a star (in the upper-right corner of your browser window):
-
-![GitHub star](doxygen/images/github-star.jpg)
-
-
-   [RTEF]: <https://www.state-machine.com/rtef>
-   [QP]: <https://www.state-machine.com/products/qp>
-   [QP/C]: <https://www.state-machine.com/qpc>
-   [QP/C++]: <https://www.state-machine.com/qpcpp>
-   [QM]: <https://www.state-machine.com/products/qm>
-   [Active]: <https://www.state-machine.com/active-object>
-   [HSM]: <https://www.state-machine.com/fsm#HSM>
-   [Lic]: <https://www.state-machine.com/licensing>
-   [Cust]: <https://www.state-machine.com/customers>
-   [AN]: <https://www.state-machine.com/doc/AN_Getting_Started_with_QP.pdf>
-   [Tutorial]: <https://www.state-machine.com/qpc/gs_tut.html>
-   [Video]: <https://youtu.be/O7ER6_VqIH0>
+
+## 4. 快速开始
+
+1. 克隆仓库并初始化子模块
+
+   ```bash
+   git clone https://github.com/stallion5632/qpc-rtthread.git
+   cd qpc-rtthread
+   git submodule update --init --recursive
+   ```
+
+2. 配置 RT-Thread 工程，启用宏（示例）：
+
+   ```c
+   #define QPC_USING_PERFORMANCE_TESTS
+   #define RT_USING_MAILBOX
+   #define RT_USING_HEAP
+   #define RT_USING_TIMER
+   #define RT_USING_MUTEX
+   #define PKG_USING_QPC
+   ```
+
+
+
+3. 运行并验证
+   通过串口和 LED 指示，观察状态机行为与性能测试报告。
+
+
+## 5. 移植层概览
+
+位于 `ports/rt-thread/`，核心文件：
+
+- **qp_port.h / qp_port.c**：QP/C 与 RT-Thread 内核接口
+- **qf_opt_layer.c/h**：事件分级、批量分发、零拷贝等优化
+- **线程封装**：将 QActive 绑定到 RT-Thread 线程/信号量
+- **时间事件**：利用 RT-Thread 定时器驱动 QP/C 时序事件
+- **内存管理桥接**：支持 QP/C 事件池和动态队列分配
+
+
+## 6. 性能测试与示例
+
+- **apps/performance_tests/**：延迟、吞吐、抖动、内存占用等一键性能报告
+- **examples/rt-thread/**：
+  - blinky：LED 翻转示例
+  - qactive_demo_lite：轻量级事件驱动模板
+  - qactive_demo_nonblock：异步代理线程架构
+
+
+## 7. 常见问题
+
+- 如何对齐 AO 与线程优先级？
+  建议将 QActive 的优先级映射到 RT-Thread 线程优先级，避免相互抢占冲突。
+
+- 时间事件精度？
+  由 RT-Thread 系统滴答决定，可修改 `RT_TICK_PER_SECOND` 调整。
+
+- DWT 计数器为零？
+  仿真环境（QEMU）中 DWT 不可用，已自动降级为滴答计数。
+
+- 事件池断言失败？
+  确保事件池按照大小递增初始化，详见 `ports/rt-thread/QPC_RTThread_Tech_Summary.md`。
+
+
+## 8. QP/C 原始仓库资源
+
+- GitHub 仓库：https://github.com/QuantumLeaps/qpc
+- QP/C 在线文档：https://www.state-machine.com/qpc
+- Getting Started 指南：https://state-machine.com/doc/AN_Getting_Started_with_QPC.pdf
+
+
+## 9. 许可与支持
+
+QP/C 部分采用双重许可：GPLv3（开源）或 Quantum Leaps 商业闭源授权。
+SafeQP 系列仅提供商业授权。
+
+本移植包源码遵循 MIT 许可协议，详见 [LICENSE](./LICENSE)。
+
+如需商业授权、技术支持或认证工具包，请联系 info@state-machine.com。
