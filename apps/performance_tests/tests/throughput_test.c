@@ -5,11 +5,13 @@
 ============================================================================*/
 #include "perf_test.h"
 #include "qpc.h"
+#include "cycle_counter.h"
 
 /*==========================================================================*/
 /* Throughput Test Data Structure */
 /*==========================================================================*/
-typedef struct {
+typedef struct
+{
     rt_uint32_t packets_sent;
     rt_uint32_t packets_received;
     rt_uint32_t start_cycles;
@@ -24,36 +26,11 @@ typedef struct {
 static throughput_test_data_t s_throughput_data;
 
 /* Mailbox storage */
-#define MAILBOX_SIZE 128  /* Increase mailbox size to reduce send failures */
+#define MAILBOX_SIZE 128 /* Increase mailbox size to reduce send failures */
 static rt_ubase_t producer_mb_pool[MAILBOX_SIZE];
 static rt_ubase_t consumer_mb_pool[MAILBOX_SIZE];
 
 /*==========================================================================*/
-/* DWT Cycle Counter Functions */
-/*==========================================================================*/
-#define DWT_CTRL     (*(volatile rt_uint32_t*)0xE0001000)
-#define DWT_CYCCNT   (*(volatile rt_uint32_t*)0xE0001004)
-#define CoreDebug_DEMCR (*(volatile rt_uint32_t*)0xE000EDFC)
-
-static void dwt_init(void) {
-    /* Enable DWT unit */
-    CoreDebug_DEMCR |= (1 << 24); /* Enable DWT */
-    DWT_CYCCNT = 0; /* Reset cycle counter */
-    DWT_CTRL |= 1; /* Enable cycle counter */
-
-    rt_kprintf("[Throughput Test] DWT initialized, CTRL=0x%08x\n", DWT_CTRL);
-    if (DWT_CTRL == 0) {
-        rt_kprintf("[Throughput Test] Warning: DWT not available, using RT-Thread ticks as fallback\n");
-    }
-}
-
-static rt_uint32_t dwt_get_cycles(void) {
-    /* If DWT is not available, use RT-Thread tick as fallback */
-    if (DWT_CTRL == 0) {
-        return rt_tick_get() * 1000; /* Scale ticks to approximate cycles */
-    }
-    return DWT_CYCCNT;
-}/*==========================================================================*/
 /* Producer Thread Function */
 /*==========================================================================*/
 static void producer_thread_func(void *parameter)
@@ -63,18 +40,23 @@ static void producer_thread_func(void *parameter)
 
     rt_kprintf("[Throughput Producer] Started\n");
 
-    while (data->test_running && data->packets_sent < data->target_packets) {
+    while (data->test_running && data->packets_sent < data->target_packets)
+    {
         /* Send packet to consumer via mailbox */
         rt_err_t result = rt_mb_send(&data->producer_mb, packet_id);
-        if (result == RT_EOK) {
+        if (result == RT_EOK)
+        {
             data->packets_sent++;
             packet_id++;
 
             /* Log every 100 packets */
-            if (data->packets_sent % 100 == 0) {
+            if (data->packets_sent % 100 == 0)
+            {
                 rt_kprintf("[Throughput Producer] Sent %u packets\n", data->packets_sent);
             }
-        } else {
+        }
+        else
+        {
             rt_kprintf("[Throughput Producer] Send failed, result=%d (mailbox full), retry after delay\n", result);
             rt_thread_mdelay(5); /* Wait longer if mailbox is full */
         }
@@ -96,10 +78,12 @@ static void consumer_thread_func(void *parameter)
 
     rt_kprintf("[Throughput Consumer] Started\n");
 
-    while (data->test_running) {
+    while (data->test_running)
+    {
         /* Receive packet from producer */
         rt_err_t result = rt_mb_recv(&data->producer_mb, &packet_id, RT_WAITING_FOREVER);
-        if (result == RT_EOK) {
+        if (result == RT_EOK)
+        {
             data->packets_received++;
 
             /* Send acknowledgment back */
@@ -107,7 +91,8 @@ static void consumer_thread_func(void *parameter)
         }
 
         /* Exit condition */
-        if (data->packets_received >= data->target_packets) {
+        if (data->packets_received >= data->target_packets)
+        {
             break;
         }
     }
@@ -134,21 +119,23 @@ static int throughput_test_init(perf_test_case_t *tc)
 
     /* Initialize mailboxes */
     rt_err_t result = rt_mb_init(&s_throughput_data.producer_mb,
-                                "producer_mb",
-                                producer_mb_pool,
-                                MAILBOX_SIZE,
-                                RT_IPC_FLAG_FIFO);
-    if (result != RT_EOK) {
+                                 "producer_mb",
+                                 producer_mb_pool,
+                                 MAILBOX_SIZE,
+                                 RT_IPC_FLAG_FIFO);
+    if (result != RT_EOK)
+    {
         rt_kprintf("[Throughput Test] Failed to initialize producer mailbox\n");
         return -1;
     }
 
     result = rt_mb_init(&s_throughput_data.consumer_mb,
-                       "consumer_mb",
-                       consumer_mb_pool,
-                       MAILBOX_SIZE,
-                       RT_IPC_FLAG_FIFO);
-    if (result != RT_EOK) {
+                        "consumer_mb",
+                        consumer_mb_pool,
+                        MAILBOX_SIZE,
+                        RT_IPC_FLAG_FIFO);
+    if (result != RT_EOK)
+    {
         rt_kprintf("[Throughput Test] Failed to initialize consumer mailbox\n");
         rt_mb_detach(&s_throughput_data.producer_mb);
         return -1;
@@ -180,24 +167,27 @@ static int throughput_test_run(perf_test_case_t *tc)
 
     /* Create producer thread */
     producer_thread = rt_thread_create("producer",
-                                      producer_thread_func,
-                                      data,
-                                      2048,
-                                      RT_THREAD_PRIORITY_MAX / 2 - 1,
-                                      10);
+                                       producer_thread_func,
+                                       data,
+                                       2048,
+                                       RT_THREAD_PRIORITY_MAX / 2 - 1,
+                                       10);
 
     /* Create consumer thread */
     consumer_thread = rt_thread_create("consumer",
-                                      consumer_thread_func,
-                                      data,
-                                      2048,
-                                      RT_THREAD_PRIORITY_MAX / 2 - 1,
-                                      10);
+                                       consumer_thread_func,
+                                       data,
+                                       2048,
+                                       RT_THREAD_PRIORITY_MAX / 2 - 1,
+                                       10);
 
-    if (!producer_thread || !consumer_thread) {
+    if (!producer_thread || !consumer_thread)
+    {
         rt_kprintf("[Throughput Test] Failed to create threads\n");
-        if (producer_thread) rt_thread_delete(producer_thread);
-        if (consumer_thread) rt_thread_delete(consumer_thread);
+        if (producer_thread)
+            rt_thread_delete(producer_thread);
+        if (consumer_thread)
+            rt_thread_delete(consumer_thread);
         return -1;
     }
 
@@ -210,8 +200,10 @@ static int throughput_test_run(perf_test_case_t *tc)
     rt_uint32_t check_interval_ms = 100;
     rt_uint32_t elapsed_ms = 0;
 
-    while (data->test_running && elapsed_ms < timeout_ms) {
-        if (data->packets_received >= data->target_packets) {
+    while (data->test_running && elapsed_ms < timeout_ms)
+    {
+        if (data->packets_received >= data->target_packets)
+        {
             break;
         }
 
@@ -237,7 +229,8 @@ static int throughput_test_run(perf_test_case_t *tc)
                data->packets_sent, data->packets_received, data->test_duration_cycles);
 
     /* Add performance analysis */
-    if (data->test_duration_cycles > 0) {
+    if (data->test_duration_cycles > 0)
+    {
         rt_uint32_t throughput = (data->packets_received * 1000) / (data->test_duration_cycles / 1000);
         rt_kprintf("[Throughput Test] Performance: %u packets/second\n", throughput);
     }
@@ -248,7 +241,8 @@ static int throughput_test_run(perf_test_case_t *tc)
 static int throughput_test_stop(perf_test_case_t *tc)
 {
     throughput_test_data_t *data = (throughput_test_data_t *)tc->user_data;
-    if (data) {
+    if (data)
+    {
         data->test_running = RT_FALSE;
 
         /* Clean up mailboxes */

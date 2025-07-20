@@ -57,7 +57,9 @@
 #endif
 
 enum RT_Thread_ThreadAttrs {
-    THREAD_NAME_ATTR
+    THREAD_NAME_ATTR,
+    THREAD_PRIO_ATTR,
+    THREAD_BIND_CPU_ATTR
 };
 
 #include <rtthread.h>   /* RT-Thread API */
@@ -90,4 +92,3 @@ enum RT_Thread_ThreadAttrs {
 #endif /* ifdef QP_IMPL */
 
 #endif /* QF_PORT_H */
-

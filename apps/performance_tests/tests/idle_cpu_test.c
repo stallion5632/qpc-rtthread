@@ -5,11 +5,13 @@
 ============================================================================*/
 #include "perf_test.h"
 #include "qpc.h"
+#include "cycle_counter.h"
 
 /*==========================================================================*/
 /* Idle CPU Test Data Structure */
 /*==========================================================================*/
-typedef struct {
+typedef struct
+{
     rt_uint32_t measurement_count;
     rt_uint32_t target_measurements;
     rt_uint32_t test_duration_cycles;
@@ -25,29 +27,11 @@ static idle_cpu_test_data_t s_idle_data;
 /*==========================================================================*/
 /* DWT Cycle Counter Functions */
 /*==========================================================================*/
-#define DWT_CTRL     (*(volatile rt_uint32_t*)0xE0001000)
-#define DWT_CYCCNT   (*(volatile rt_uint32_t*)0xE0001004)
-#define CoreDebug_DEMCR (*(volatile rt_uint32_t*)0xE000EDFC)
+#define DWT_CTRL (*(volatile rt_uint32_t *)0xE0001000)
+#define DWT_CYCCNT (*(volatile rt_uint32_t *)0xE0001004)
+#define CoreDebug_DEMCR (*(volatile rt_uint32_t *)0xE000EDFC)
 
-static void dwt_init(void) {
-    /* Enable DWT unit */
-    CoreDebug_DEMCR |= (1 << 24); /* Enable DWT */
-    DWT_CYCCNT = 0; /* Reset cycle counter */
-    DWT_CTRL |= 1; /* Enable cycle counter */
-
-    rt_kprintf("[Idle CPU Test] DWT initialized, CTRL=0x%08x\n", DWT_CTRL);
-    if (DWT_CTRL == 0) {
-        rt_kprintf("[Idle CPU Test] Warning: DWT not available, using RT-Thread ticks as fallback\n");
-    }
-}
-
-static rt_uint32_t dwt_get_cycles(void) {
-    /* If DWT is not available, use RT-Thread tick as fallback */
-    if (DWT_CTRL == 0) {
-        return rt_tick_get() * 1000; /* Scale ticks to approximate cycles */
-    }
-    return DWT_CYCCNT;
-}/*==========================================================================*/
+/*==========================================================================*/
 /* Idle Task - Simulates idle CPU activity */
 /*==========================================================================*/
 static void idle_task_func(void *parameter)
@@ -57,9 +41,11 @@ static void idle_task_func(void *parameter)
 
     rt_kprintf("[Idle CPU Task] Started\n");
 
-    while (data->test_running) {
+    while (data->test_running)
+    {
         /* Simulate idle work - simple counting */
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 1000; i++)
+        {
             local_idle_count++;
         }
 
@@ -85,7 +71,8 @@ static void monitor_thread_func(void *parameter)
 
     rt_kprintf("[Idle CPU Monitor] Started\n");
 
-    while (data->test_running && data->measurement_count < data->target_measurements) {
+    while (data->test_running && data->measurement_count < data->target_measurements)
+    {
         rt_thread_mdelay(measurement_interval_ms);
 
         /* Record measurement */
@@ -97,14 +84,16 @@ static void monitor_thread_func(void *parameter)
         last_idle_count = current_idle;
 
         /* Log every 10 measurements */
-        if (data->measurement_count % 10 == 0) {
+        if (data->measurement_count % 10 == 0)
+        {
             rt_kprintf("[Idle CPU Monitor] Progress: %u/%u measurements, current idle delta: %u\n",
                        data->measurement_count, data->target_measurements, idle_delta);
         }
 
         /* Check if test duration reached */
         rt_uint32_t current_cycles = dwt_get_cycles();
-        if ((current_cycles - data->start_cycles) >= data->test_duration_cycles) {
+        if ((current_cycles - data->start_cycles) >= data->test_duration_cycles)
+        {
             break;
         }
     }
@@ -122,7 +111,7 @@ static int idle_cpu_test_init(perf_test_case_t *tc)
 
     /* Initialize test data */
     s_idle_data.measurement_count = 0;
-    s_idle_data.target_measurements = 100;   /* Match expected report */
+    s_idle_data.target_measurements = 100;      /* Match expected report */
     s_idle_data.test_duration_cycles = 1000000; /* 1M cycles for test duration */
     s_idle_data.start_cycles = 0;
     s_idle_data.total_idle_count = 0;
@@ -157,24 +146,27 @@ static int idle_cpu_test_run(perf_test_case_t *tc)
 
     /* Create idle task thread */
     idle_thread = rt_thread_create("idle_task",
-                                  idle_task_func,
-                                  data,
-                                  2048,
-                                  RT_THREAD_PRIORITY_MAX - 1, /* Low priority */
-                                  10);
+                                   idle_task_func,
+                                   data,
+                                   2048,
+                                   RT_THREAD_PRIORITY_MAX - 1, /* Low priority */
+                                   10);
 
     /* Create monitor thread */
     data->monitor_thread = rt_thread_create("idle_monitor",
-                                           monitor_thread_func,
-                                           data,
-                                           2048,
-                                           RT_THREAD_PRIORITY_MAX / 2,
-                                           10);
+                                            monitor_thread_func,
+                                            data,
+                                            2048,
+                                            RT_THREAD_PRIORITY_MAX / 2,
+                                            10);
 
-    if (!idle_thread || !data->monitor_thread) {
+    if (!idle_thread || !data->monitor_thread)
+    {
         rt_kprintf("[Idle CPU Test] Failed to create threads\n");
-        if (idle_thread) rt_thread_delete(idle_thread);
-        if (data->monitor_thread) rt_thread_delete(data->monitor_thread);
+        if (idle_thread)
+            rt_thread_delete(idle_thread);
+        if (data->monitor_thread)
+            rt_thread_delete(data->monitor_thread);
         return -1;
     }
 
@@ -183,11 +175,13 @@ static int idle_cpu_test_run(perf_test_case_t *tc)
     rt_thread_startup(data->monitor_thread);
 
     /* Wait for completion */
-    while (data->test_running) {
+    while (data->test_running)
+    {
         /* Check if test should stop */
         rt_uint32_t current_cycles = dwt_get_cycles();
         if ((current_cycles - data->start_cycles) >= data->test_duration_cycles ||
-            data->measurement_count >= data->target_measurements) {
+            data->measurement_count >= data->target_measurements)
+        {
             data->test_running = RT_FALSE;
             break;
         }
@@ -196,14 +190,14 @@ static int idle_cpu_test_run(perf_test_case_t *tc)
         tc->iterations++;
     }
 
-
     /* Wait for threads to naturally exit, no manual delete needed to avoid assertion failure */
     rt_thread_mdelay(200);
 
     /* Update final statistics */
     tc->stats.measurements = data->measurement_count;
     tc->stats.total_idle_count = data->total_idle_count;
-    if (data->measurement_count > 0) {
+    if (data->measurement_count > 0)
+    {
         tc->stats.avg_idle_per_measurement = data->total_idle_count / data->measurement_count;
     }
 
@@ -216,7 +210,8 @@ static int idle_cpu_test_run(perf_test_case_t *tc)
 static int idle_cpu_test_stop(perf_test_case_t *tc)
 {
     idle_cpu_test_data_t *data = (idle_cpu_test_data_t *)tc->user_data;
-    if (data) {
+    if (data)
+    {
         data->test_running = RT_FALSE;
     }
 
