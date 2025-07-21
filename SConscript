@@ -19,6 +19,7 @@ src     = Split("""
 ./ports/rt-thread/qf_hooks.c
 ./ports/rt-thread/qf_port.c
 ./ports/rt-thread/qf_opt_layer.c
+./ports/rt-thread/qf_rtmpool.c
 """)
 
 
@@ -28,6 +29,15 @@ if GetDepend(['QPC_USING_BLINKY_EXAMPLE']):
 perf_group = None
 if GetDepend(['QPC_USING_QACTIVE_PERFORMANCE_TESTS']):
     perf_group = SConscript('apps/performance_tests/SConscript')
+
+# demo_groups = []
+# if GetDepend(['QPC_USING_QACTIVE_DEMO_LITE']):
+#     demo_groups.append(SConscript('examples/rt-thread/qactive_demo_lite/SConscript'))
+
+# if GetDepend(['QPC_RTMPoolDemo']):
+#     demo_groups.append(SConscript('examples/rt-thread/rtmpool_demo/SConscript'))
+
+src += Glob('examples/rt-thread/rtmpool_demo/*.c')
 
 path = [cwd + "/ports/rt-thread", cwd + "/include", cwd + "/src",
         cwd + "/apps/performance_tests",
@@ -40,5 +50,9 @@ group = DefineGroup('qpc', src, depend = ['RT_USING_MAILBOX', 'PKG_USING_QPC'], 
 # merge performance_tests group
 if perf_group:
     group += perf_group
+
+# # merge demo group
+# for g in demo_groups:
+#     group += g
 
 Return('group')
