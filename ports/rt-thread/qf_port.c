@@ -49,9 +49,7 @@ void QF_init(void) {
 /*..........................................................................*/
 int_t QF_run(void) {
     QS_CRIT_STAT_
-
     QF_onStartup();  /* QF callback to configure and start interrupts */
-
     /* Initialize the optimization layer */
     QF_initOptLayer();
 
@@ -66,17 +64,94 @@ void QF_stop(void) {
     QF_onCleanup(); /* cleanup callback */
 }
 /*..........................................................................*/
+static void feed_watchdog(QActive *act) {
+#if defined(RT_USING_DEVICE) && defined(RT_USING_DEVICE_TIMER)
+    /* Feed watchdog if available */
+    rt_device_t wdt_dev = rt_device_find("wdt");
+    if (wdt_dev != RT_NULL) {
+        rt_device_control(wdt_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, RT_NULL);
+    }
+#endif /* RT_USING_DEVICE && RT_USING_DEVICE_TIMER */
+
+#ifdef Q_RT_DEBUG
+#if 0
+    rt_kprintf("[QF_HEARTBEAT] Watchdog fed for AO: %s\n",
+               act->thread.name ? act->thread.name : "Unknown");
+#endif /* 0 */
+#endif /* Q_RT_DEBUG */
+}
+
+#if 0
+/*..........................................................................*/
+static void perf_heartbeat(QActive *act) {
+    static uint32_t heartbeat_count = 0;
+    ++heartbeat_count;
+
+    /* Update internal statistics */
+    /* Could add performance monitoring here */
+
+#ifdef Q_RT_DEBUG
+    if ((heartbeat_count % 50) == 0) { /* Every 5 seconds at 100ms intervals */
+        rt_kprintf("[QF_HEARTBEAT] AO: %s, count: %lu\n",
+                   act->thread.name ? act->thread.name : "Unknown",
+                   heartbeat_count);
+    }
+#endif /* Q_RT_DEBUG */
+
+    /* Send periodic tick event if needed */
+    /* This could be application-specific */
+}
+#endif /* 0 */
+
+/*..........................................................................*/
 static void thread_function(void *parameter) { /* RT-Thread signature */
     QActive *act = (QActive *)parameter;
 #ifdef Q_RT_DEBUG
     rt_kprintf("[thread_function] AO thread started: %p, name: %s, prio: %d, stat: %d\n",
                act, rt_thread_self()->name, rt_thread_self()->current_priority, rt_thread_self()->stat);
 #endif /* Q_RT_DEBUG */
+
     /* event-loop */
     for (;;) { /* for-ever */
+#if QF_ENABLE_HEARTBEAT
+        QEvt const *e;
+        rt_err_t result;
+
+        /* Try to receive event with timeout */
+        result = rt_mb_recv(&act->eQueue, (rt_ubase_t *)&e, QF_HEARTBEAT_TICKS);
+
+        if (result == RT_EOK) {
+            /* Event received, process it */
+            QS_CRIT_STAT_
+
+            QS_BEGIN_PRE_(QS_QF_ACTIVE_GET, act->prio)
+                QS_TIME_PRE_();       /* timestamp */
+                QS_SIG_PRE_(e->sig);  /* the signal of this event */
+                QS_OBJ_PRE_(act);     /* this active object */
+                QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
+                QS_EQC_PRE_(act->eQueue.size - act->eQueue.entry);/* # free */
+            QS_END_PRE_()
+
+            QHSM_DISPATCH(&act->super, e, act->prio);
+            QF_gc(e); /* check if the event is garbage, and collect it if so */
+        }
+        else if (result == -RT_ETIMEOUT) {
+            /* Timeout occurred - perform heartbeat tasks */
+            feed_watchdog(act);
+            /* perf_heartbeat(act); */
+        }
+        else {
+            /* Other error - should not happen in normal operation */
+#ifdef Q_RT_DEBUG
+            rt_kprintf("[QF_ERROR] Unexpected error in thread_function: %d\n", result);
+#endif /* Q_RT_DEBUG */
+        }
+#else
+        /* Original implementation without heartbeat */
         QEvt const *e = QActive_get_(act);
         QHSM_DISPATCH(&act->super, e, act->prio);
         QF_gc(e); /* check if the event is garbage, and collect it if so */
+#endif /* QF_ENABLE_HEARTBEAT */
     }
 }
 /*..........................................................................*/
@@ -243,9 +318,14 @@ void QActive_postLIFO_(QActive * const me, QEvt const * const e) {
 }
 /*..........................................................................*/
 QEvt const *QActive_get_(QActive * const me) {
-    QEvt const *e;
+    QEvt const *e = (QEvt const *)0;
     QS_CRIT_STAT_
 
+#if QF_ENABLE_HEARTBEAT
+    /* When heartbeat is enabled, this function should not be called
+     * directly as timeout handling is done in thread_function */
+    Q_ERROR_ID(715); /* Should not reach here when heartbeat is enabled */
+#else
     Q_ALLEGE_ID(710,
         rt_mb_recv(&me->eQueue, (rt_ubase_t *)&e, RT_WAITING_FOREVER)
         == RT_EOK);
@@ -257,6 +337,7 @@ QEvt const *QActive_get_(QActive * const me) {
         QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
         QS_EQC_PRE_(me->eQueue.size - me->eQueue.entry);/* # free */
     QS_END_PRE_()
+#endif /* QF_ENABLE_HEARTBEAT */
 
     return e;
 }

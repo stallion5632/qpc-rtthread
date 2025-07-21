@@ -27,11 +27,11 @@ Q_DEFINE_THIS_FILE
 
 enum { BSP_TICKS_PER_SEC = 100 };
 
-void BSP_ledOff(void) {
+static void BSP_ledOff(void) {
     rt_kprintf("LED OFF\n");
 }
 
-void BSP_ledOn(void) {
+static void BSP_ledOn(void) {
     rt_kprintf("LED ON\n");
 }
 

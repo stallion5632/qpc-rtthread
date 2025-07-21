@@ -1,4 +1,5 @@
 #include <rtthread.h>
+#include "qf_port.h"
 #include "qpc.h"
 
 static rt_timer_t qpc_tick_timer;

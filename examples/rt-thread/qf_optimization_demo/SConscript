@@ -1,0 +1,10 @@
+import rtconfig
+from building import *
+
+cwd = GetCurrentDir()
+src = Glob('*.c')
+path = [cwd]
+
+group = DefineGroup('QPC_OPT_Demo', src, depend = ['PKG_USING_QPC', 'QPC_USING_QF_OPTIMIZATION_DEMO'], CPPPATH = path)
+
+Return('group')

@@ -43,17 +43,18 @@
 #define QF_CRIT_ENTRY(stat_)  (rt_enter_critical())
 #define QF_CRIT_EXIT(stat_)   (rt_exit_critical())
 
-/* QF optimization layer configuration */
-#ifndef QF_STAGING_BUFFER_SIZE
-#define QF_STAGING_BUFFER_SIZE 32U  /*!< Configurable staging buffer size */
+/* Heartbeat and watchdog configuration */
+#ifndef QF_HEARTBEAT_TICKS
+#define QF_HEARTBEAT_TICKS (RT_TICK_PER_SECOND/10)  /*!< 100ms heartbeat interval */
 #endif
 
-#ifndef QF_DISPATCHER_STACK_SIZE
-#define QF_DISPATCHER_STACK_SIZE 2048U  /*!< Configurable dispatcher stack size */
+#ifndef QF_ENABLE_HEARTBEAT
+#define QF_ENABLE_HEARTBEAT 1  /*!< Enable heartbeat and watchdog features */
 #endif
 
-#ifndef QF_DISPATCHER_PRIORITY
-#define QF_DISPATCHER_PRIORITY 0U  /*!< Highest priority for dispatcher */
+/* RT-Thread memory pool integration */
+#ifndef QF_ENABLE_RT_MEMPOOL
+#define QF_ENABLE_RT_MEMPOOL 0  /*!< Disable RT-Thread memory pool integration temporarily */
 #endif
 
 enum RT_Thread_ThreadAttrs {
@@ -66,28 +67,27 @@ enum RT_Thread_ThreadAttrs {
 #include "qequeue.h"  /* native QF event queue for deferring events */
 #include "qmpool.h"   /* native QF event pool */
 #include "qf.h"       /* QF platform-independent public interface */
-#include "qf_opt_layer.h" /* QF optimization layer */
 
 /*****************************************************************************
 * interface used only inside QF, but not in applications
 */
+
 #ifdef QP_IMPL
 
-    #define QF_SCHED_STAT_
-    #define QF_SCHED_LOCK_(prio_)   rt_enter_critical()
-    #define QF_SCHED_UNLOCK_()      rt_exit_critical()
+#define QF_SCHED_STAT_
+#define QF_SCHED_LOCK_(prio_)   rt_enter_critical()
+#define QF_SCHED_UNLOCK_()      rt_exit_critical()
 
-    /* native QF event pool operations */
-    #define QF_EPOOL_TYPE_            QMPool
-    #define QF_EPOOL_INIT_(p_, poolSto_, poolSize_, evtSize_) \
-        (QMPool_init(&(p_), (poolSto_), (poolSize_), (evtSize_)))
-    #define QF_EPOOL_EVENT_SIZE_(p_)  ((uint_fast16_t)(p_).blockSize)
-    #define QF_EPOOL_GET_(p_, e_, m_, qs_id_) \
-        ((e_) = (QEvt *)QMPool_get(&(p_), (m_), (qs_id_)))
-    #define QF_EPOOL_PUT_(p_, e_, qs_id_) \
-        (QMPool_put(&(p_), (e_), (qs_id_)))
+/* native QF event pool operations */
+#define QF_EPOOL_TYPE_            QMPool
+#define QF_EPOOL_INIT_(p_, poolSto_, poolSize_, evtSize_) \
+    (QMPool_init(&(p_), (poolSto_), (poolSize_), (evtSize_)))
+#define QF_EPOOL_EVENT_SIZE_(p_)  ((uint_fast16_t)(p_).blockSize)
+#define QF_EPOOL_GET_(p_, e_, m_, qs_id_) \
+    ((e_) = (QEvt *)QMPool_get(&(p_), (m_), (qs_id_)))
+#define QF_EPOOL_PUT_(p_, e_, qs_id_) \
+    (QMPool_put(&(p_), (e_), (qs_id_)))
 
 #endif /* ifdef QP_IMPL */
 
 #endif /* QF_PORT_H */
-

@@ -15,15 +15,18 @@ src     = Split("""
 ./src/qf/qf_qmact.c
 ./src/qf/qf_time.c
 ./include/qstamp.c
-./ports/rt-thread/qf_diagnostics.c
 ./ports/rt-thread/qf_hooks.c
 ./ports/rt-thread/qf_port.c
-./ports/rt-thread/qf_opt_layer.c
+./ports/rt-thread/qf_example.c
+./ports/rt-thread/qf_opt_layer_stub.c
 """)
 
 
 if GetDepend(['QPC_USING_BLINKY_EXAMPLE']):
     src += Glob('examples/rt-thread/blinky/blinky.c')
+
+if GetDepend(['QPC_USING_QACTIVE_DEMO_LITE']):
+    src += Glob('examples/rt-thread/qactive_demo_lite/*.c')
 
 perf_group = None
 if GetDepend(['QPC_USING_QACTIVE_PERFORMANCE_TESTS']):

@@ -13,8 +13,8 @@ path = [cwd]
 
 # Define the QActive demo group
 # This group depends on QPC without QXK kernel support
-group = DefineGroup('qpc_qactive_demo', src,
-                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO', 'RT_USING_FINSH'],
-                   CPPPATH = path)
+group = DefineGroup('qpc_qactive_demo_lite', src,
+                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO_LITE', 'RT_USING_FINSH'],
+                   CPPATH = path)
 
 Return('group')

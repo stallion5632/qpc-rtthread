@@ -11,6 +11,21 @@
 #include <finsh.h>
 #include "qpc.h"
 
+/* Forward declarations for RT-Thread mempool functions */
+#if QF_ENABLE_RT_MEMPOOL
+extern void QF_poolPrintStats_RT(void);
+#endif
+
+/*..........................................................................*/
+static void QF_printMemPoolStatus(void) {
+#if QF_ENABLE_RT_MEMPOOL
+    QF_poolPrintStats_RT(); /* Print RT-Thread memory pool statistics */
+#else
+    rt_kprintf("RT-Thread memory pool integration is disabled.\n");
+    rt_kprintf("Using QPC native memory pools.\n");
+#endif /* QF_ENABLE_RT_MEMPOOL */
+}
+
 /*..........................................................................*/
 static void QF_printMetrics(void) {
     QF_DispatcherMetrics const *metrics = QF_getDispatcherMetrics();
@@ -129,4 +144,5 @@ MSH_CMD_EXPORT_ALIAS(QF_printAOStatus, qf_aos, Display Active Object status);
 MSH_CMD_EXPORT_ALIAS(QF_setStrategy, qf_strategy, Set dispatcher strategy);
 MSH_CMD_EXPORT_ALIAS(QF_resetMetrics, qf_reset, Reset dispatcher metrics);
 MSH_CMD_EXPORT_ALIAS(QF_enableDisableOpt, qf_opt, Enable/disable optimization layer);
+MSH_CMD_EXPORT_ALIAS(QF_printMemPoolStatus, qf_mempool, Display memory pool status);
 MSH_CMD_EXPORT_ALIAS(QF_dispatcherHelp, qf_help, Display QF dispatcher help);
