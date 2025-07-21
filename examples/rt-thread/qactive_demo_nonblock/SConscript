@@ -7,6 +7,10 @@ cwd = GetCurrentDir()
 src = Split("""
 main.c
 rt_integration.c
+storage_proxy.c
+config_proxy.c
+stub_flash_config.c
+event_publisher.c
 """)
 
 # Include paths
@@ -14,8 +18,8 @@ path = [cwd]
 
 # Define the QActive demo group
 # This group depends on QPC with QActive support
-group = DefineGroup('qpc_qactive_demo', src, 
-                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO', 'RT_USING_FINSH'], 
+group = DefineGroup('qpc_qactive_demo', src,
+                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO_NONBLOCK', 'RT_USING_FINSH'],
                    CPPPATH = path)
 
 Return('group')
