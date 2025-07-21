@@ -28,7 +28,7 @@
 ============================================================================*/
 #include "qactive_demo.h"
 
-#ifdef QPC_USING_QACTIVE_DEMO
+#ifdef QPC_USING_QACTIVE_DEMO_LITE
 #ifdef RT_USING_FINSH
 
 #include <finsh.h>
@@ -550,4 +550,4 @@ int main(void)
 }
 
 #endif /* RT_USING_FINSH */
-#endif /* QPC_USING_QACTIVE_DEMO */
+#endif /* QPC_USING_QACTIVE_DEMO_LITE */

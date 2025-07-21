@@ -1,0 +1,9 @@
+from building import *
+
+cwd = GetCurrentDir()
+src = Glob('*.c')
+CPPPATH = [cwd]
+
+group = DefineGroup('rtmpool_demo', src, depend=['QPC_USING_RTMPOOL_DEMO'], CPPPATH=CPPPATH)
+
+Return('group')
