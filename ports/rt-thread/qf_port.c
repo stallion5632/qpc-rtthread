@@ -76,7 +76,10 @@ static void thread_function(void *parameter) { /* RT-Thread signature */
     for (;;) { /* for-ever */
         QEvt const *e = QActive_get_(act);
         QHSM_DISPATCH(&act->super, e, act->prio);
-        QF_gc(e); /* check if the event is garbage, and collect it if so */
+        /* 只允许通过QF_newX_RT分配的事件（poolId_!=0）被gc，静态/常量/栈上事件禁止gc */
+        if (e->poolId_ != 0U) {
+            QF_gc(e);
+        }
     }
 }
 /*..........................................................................*/
@@ -210,7 +213,10 @@ bool QActive_post_(QActive * const me, QEvt const * const e,
         QF_CRIT_X_();
 
         #if (QF_MAX_EPOOL > 0U)
-        QF_gc(e); /* recycle the event to avoid a leak */
+        /* 只允许通过QF_newX_RT分配的事件（poolId_!=0）被gc，静态/常量/栈上事件禁止gc */
+        if (e->poolId_ != 0U) {
+            QF_gc(e);
+        }
         #endif
     }
 
@@ -243,7 +249,7 @@ void QActive_postLIFO_(QActive * const me, QEvt const * const e) {
 }
 /*..........................................................................*/
 QEvt const *QActive_get_(QActive * const me) {
-    QEvt const *e;
+    QEvt const *e = (QEvt const *)0;
     QS_CRIT_STAT_
 
     Q_ALLEGE_ID(710,

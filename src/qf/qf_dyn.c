@@ -192,11 +192,11 @@ QEvt * QF_newX_(
     return e; /* can't be NULL if we can't tolerate failed allocation */
 }
 
+#if !QF_ENABLE_RT_MEMPOOL
 /*${QF::QF-dyn::gc} ........................................................*/
 /*! @static @public @memberof QF */
 void QF_gc(QEvt const * const e) {
-    /* is it a dynamic event? */
-    if (e->poolId_ != 0U) {
+    if ((e != (QEvt *)0) && (e->poolId_ != 0U)) {
         QF_CRIT_STAT_
         QF_CRIT_E_();
 
@@ -231,15 +231,16 @@ void QF_gc(QEvt const * const e) {
             Q_ASSERT_ID(410, idx < QF_maxPool_);
 
             /* cast 'const' away, which is OK, because it's a pool event */
-    #ifdef Q_SPY
+#ifdef Q_SPY
             QF_EPOOL_PUT_(QF_ePool_[idx], (QEvt *)e,
                           (uint_fast8_t)QS_EP_ID + e->poolId_);
-    #else
+#else
             QF_EPOOL_PUT_(QF_ePool_[idx], (QEvt *)e, 0U);
-    #endif
+#endif
         }
     }
 }
+#endif
 
 /*${QF::QF-dyn::newRef_} ...................................................*/
 /*! @static @private @memberof QF */
@@ -288,7 +289,9 @@ void QF_deleteRef_(void const * const evtRef) {
     QS_END_PRE_()
 
     #if (QF_MAX_EPOOL > 0U)
-    QF_gc(e);
+    if (e->poolId_ != 0U) {
+        QF_gc(e);
+    }
     #endif
 }
 /*$enddef${QF::QF-dyn} ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/

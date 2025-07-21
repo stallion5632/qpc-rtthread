@@ -67,6 +67,7 @@ enum RT_Thread_ThreadAttrs {
 #include "qmpool.h"   /* native QF event pool */
 #include "qf.h"       /* QF platform-independent public interface */
 #include "qf_opt_layer.h" /* QF optimization layer */
+#include "qf_mempool.h" /* QF memory pool management */
 
 /*****************************************************************************
 * interface used only inside QF, but not in applications
@@ -89,5 +90,10 @@ enum RT_Thread_ThreadAttrs {
 
 #endif /* ifdef QP_IMPL */
 
-#endif /* QF_PORT_H */
+#define QF_ENABLE_RT_MEMPOOL 1
+#define Q_RT_DEBUG 1
+#if QF_ENABLE_RT_MEMPOOL
+    #define QF_gc QF_gc_RT
+#endif
 
+#endif /* QF_PORT_H */

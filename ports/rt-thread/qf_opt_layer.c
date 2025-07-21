@@ -79,12 +79,12 @@ static QF_DispatcherStrategy const *l_policy = &QF_defaultStrategy;
 static void dispatcherThreadEntry(void *parameter);
 static void QF_idleHook(void);
 static bool QF_addToStagingBuffer(QF_PrioLevel prioLevel, QEvt const *evt, QActive *target);
-static uint32_t QF_popAllFromStagingBuffer(QF_PrioLevel prioLevel, 
-                                           QEvt const **eventBatch, 
-                                           QActive **targetBatch, 
+static uint32_t QF_popAllFromStagingBuffer(QF_PrioLevel prioLevel,
+                                           QEvt const **eventBatch,
+                                           QActive **targetBatch,
                                            uint32_t maxSize);
-static void QF_processEventBatch(QEvt const **eventBatch, 
-                                QActive **targetBatch, 
+static void QF_processEventBatch(QEvt const **eventBatch,
+                                QActive **targetBatch,
                                 uint32_t batchSize);
 static bool QF_retryEvent(QEvt const *evt, QActive *target);
 
@@ -114,6 +114,19 @@ QF_DispatcherStrategy const QF_highPerfStrategy = {
     .getPrioLevel = highPerfGetPrioLevel
 };
 
+
+/* QF_newX_ 和 QF_gc 仅做声明和条件宏转发，避免重复实现 */
+#if QF_ENABLE_RT_MEMPOOL
+    void QF_poolInit_RT(void);
+    QEvt *QF_newX_RT(uint_fast16_t evtSize, uint_fast16_t margin, enum_t sig);
+    void QF_gc_RT(QEvt const *e);
+    #define QF_newX_  QF_newX_RT
+    #define QF_gc     QF_gc_RT
+#else
+    QEvt *QF_newX_(uint_fast16_t evtSize, uint_fast16_t margin, enum_t sig);
+    void QF_gc(QEvt const *e);
+#endif
+
 /*..........................................................................*/
 void QF_initOptLayer(void) {
     /* Initialize all priority staging buffers */
@@ -122,16 +135,16 @@ void QF_initOptLayer(void) {
         l_stagingBuffers[i].rear = 0U;
         l_stagingBuffers[i].count = 0U;
     }
-    
+
     /* Initialize dispatcher control */
     l_dispatcher.enabled = true;
     rt_memset(&l_dispatcher.metrics, 0, sizeof(l_dispatcher.metrics));
     l_dispatcher.totalBatchSize = 0U;
     l_dispatcher.batchCount = 0U;
-    
+
     /* Initialize semaphore */
     rt_sem_init(&l_dispatcher.sem, "qf_disp_sem", 0, RT_IPC_FLAG_FIFO);
-    
+
     /* Create dispatcher thread with highest priority */
     rt_thread_init(&dispatcherThreadObj,
                    "qf_dispatcher",
@@ -141,9 +154,9 @@ void QF_initOptLayer(void) {
                    sizeof(dispatcherStack),
                    QF_DISPATCHER_PRIORITY,
                    1);
-    
+
     rt_thread_startup(&dispatcherThreadObj);
-    
+
     /* Set idle hook to check staging buffers */
     rt_thread_idle_sethook(QF_idleHook);
 }
@@ -162,41 +175,41 @@ QF_DispatcherStrategy const *QF_getDispatcherPolicy(void) {
 /*..........................................................................*/
 static void dispatcherThreadEntry(void *parameter) {
     Q_UNUSED_PAR(parameter);
-    
+
     /* Local batch arrays for processing */
     QEvt const *eventBatch[QF_STAGING_BUFFER_SIZE];
     QActive *targetBatch[QF_STAGING_BUFFER_SIZE];
     uint32_t batchSize;
-    
+
     for (;;) {
         /* Wait for events to be available */
         rt_sem_take(&l_dispatcher.sem, RT_WAITING_FOREVER);
-        
+
         /* Update dispatch cycle count */
         l_dispatcher.metrics.dispatchCycles++;
-        
+
         /* Process events by priority: HIGH -> NORMAL -> LOW */
         for (uint8_t prio = QF_PRIO_HIGH; prio < QF_PRIO_LEVELS; ++prio) {
-            batchSize = QF_popAllFromStagingBuffer((QF_PrioLevel)prio, 
-                                                  eventBatch, 
-                                                  targetBatch, 
+            batchSize = QF_popAllFromStagingBuffer((QF_PrioLevel)prio,
+                                                  eventBatch,
+                                                  targetBatch,
                                                   QF_STAGING_BUFFER_SIZE);
-            
+
             if (batchSize > 0U) {
                 /* Update metrics */
                 l_dispatcher.metrics.eventsProcessed += batchSize;
                 l_dispatcher.totalBatchSize += batchSize;
                 l_dispatcher.batchCount++;
-                
+
                 if (batchSize > l_dispatcher.metrics.maxBatchSize) {
                     l_dispatcher.metrics.maxBatchSize = batchSize;
                 }
-                
+
                 /* Process the batch */
                 QF_processEventBatch(eventBatch, targetBatch, batchSize);
             }
         }
-        
+
         /* Update average batch size */
         if (l_dispatcher.batchCount > 0U) {
             l_dispatcher.metrics.avgBatchSize = l_dispatcher.totalBatchSize / l_dispatcher.batchCount;
@@ -205,36 +218,41 @@ static void dispatcherThreadEntry(void *parameter) {
 }
 
 /*..........................................................................*/
-static void QF_processEventBatch(QEvt const **eventBatch, 
-                                QActive **targetBatch, 
+static void QF_processEventBatch(QEvt const **eventBatch,
+                                QActive **targetBatch,
                                 uint32_t batchSize) {
     QF_DispatcherStrategy const *strategy = l_policy;
-    
+
     /* Apply strategy-based optimizations */
     for (uint32_t i = 0; i < batchSize; ++i) {
         QEvt const *evt = eventBatch[i];
         QActive *target = targetBatch[i];
-        
+
         if (evt == (QEvt const *)0 || target == (QActive *)0) {
             continue;
         }
-        
+
         /* Check if event should be dropped */
         if (strategy->shouldDrop(evt, target)) {
             l_dispatcher.metrics.eventsDropped++;
-            QF_gc(evt);
+            /* 只允许通过QF_newX_RT分配的事件（poolId_!=0）被gc，静态/常量/栈上事件禁止gc */
+            if (evt->poolId_ != 0U) {
+                QF_gc(evt);
+            }
             continue;
         }
-        
+
         /* Check for merge opportunities with next events */
         bool merged = false;
         if (strategy->shouldMerge != (bool (*)(QEvt const *, QEvt const *))0) {
             for (uint32_t j = i + 1; j < batchSize; ++j) {
-                if (eventBatch[j] != (QEvt const *)0 && 
+                if (eventBatch[j] != (QEvt const *)0 &&
                     targetBatch[j] == target &&
                     strategy->shouldMerge(evt, eventBatch[j])) {
                     /* Merge events - keep the later one, discard the earlier */
-                    QF_gc(evt);
+                    if (evt->poolId_ != 0U) {
+                        QF_gc(evt);
+                    }
                     eventBatch[i] = (QEvt const *)0;  /* Mark as processed */
                     l_dispatcher.metrics.eventsMerged++;
                     merged = true;
@@ -242,11 +260,11 @@ static void QF_processEventBatch(QEvt const **eventBatch,
                 }
             }
         }
-        
+
         if (!merged) {
             /* Try to post the event */
             rt_err_t result = rt_mb_send(&target->eQueue, (rt_ubase_t)evt);
-            
+
             if (result != RT_EOK) {
                 /* Post failed - apply backpressure strategy */
                 if (QF_retryEvent(evt, target)) {
@@ -254,7 +272,9 @@ static void QF_processEventBatch(QEvt const **eventBatch,
                 } else {
                     l_dispatcher.metrics.eventsDropped++;
                     l_dispatcher.metrics.postFailures++;
-                    QF_gc(evt);
+                    if (evt->poolId_ != 0U) {
+                        QF_gc(evt);
+                    }
                 }
             }
         }
@@ -264,26 +284,26 @@ static void QF_processEventBatch(QEvt const **eventBatch,
 /*..........................................................................*/
 static bool QF_retryEvent(QEvt const *evt, QActive *target) {
     QEvtEx *evtEx = (QEvtEx *)evt;
-    
+
     /* Check if event supports retry */
     if (evtEx->super.sig == 0U) {
         /* Not an extended event - cannot retry */
         return false;
     }
-    
+
     /* Check retry count */
     if (evtEx->retryCount >= QF_MAX_RETRY_COUNT) {
         /* Maximum retries exceeded */
         return false;
     }
-    
+
     /* Check if event is marked as critical (must not be dropped) */
     if ((evtEx->flags & QF_EVT_FLAG_NO_DROP) != 0U) {
         /* Put back in low priority queue for retry */
         evtEx->retryCount++;
         return QF_addToStagingBuffer(QF_PRIO_LOW, evt, target);
     }
-    
+
     return false;
 }
 
@@ -292,22 +312,22 @@ bool QF_postFromISR(QActive * const me, QEvt const * const e) {
     if (!l_dispatcher.enabled) {
         return false;
     }
-    
+
     /* Determine priority level using strategy */
     QF_PrioLevel prioLevel = l_policy->getPrioLevel(e);
-    
+
     /* Add to appropriate staging buffer */
     if (QF_addToStagingBuffer(prioLevel, e, me)) {
         /* Increment reference counter for dynamic events */
         if (e->poolId_ != 0U) {
             QEvt_refCtr_inc_(e);
         }
-        
+
         /* Signal the dispatcher thread */
         rt_sem_release(&l_dispatcher.sem);
         return true;
     }
-    
+
     return false;
 }
 
@@ -315,60 +335,60 @@ bool QF_postFromISR(QActive * const me, QEvt const * const e) {
 static bool QF_addToStagingBuffer(QF_PrioLevel prioLevel, QEvt const *evt, QActive *target) {
     volatile uint32_t rear = l_stagingBuffers[prioLevel].rear;
     volatile uint32_t next = (rear + 1U) % QF_STAGING_BUFFER_SIZE;
-    
+
     /* Check if buffer is full */
     if (next == l_stagingBuffers[prioLevel].front) {
         /* Buffer overflow */
         l_dispatcher.metrics.stagingOverflows[prioLevel]++;
         return false;
     }
-    
+
     /* Store event in staging buffer */
     l_stagingBuffers[prioLevel].buffer[rear].evt = evt;
     l_stagingBuffers[prioLevel].buffer[rear].target = target;
     l_stagingBuffers[prioLevel].buffer[rear].timestamp = QF_getTimestamp();
-    
+
     /* Update rear index atomically */
     l_stagingBuffers[prioLevel].rear = next;
     l_stagingBuffers[prioLevel].count++;
-    
+
     return true;
 }
 
 /*..........................................................................*/
-static uint32_t QF_popAllFromStagingBuffer(QF_PrioLevel prioLevel, 
-                                           QEvt const **eventBatch, 
-                                           QActive **targetBatch, 
+static uint32_t QF_popAllFromStagingBuffer(QF_PrioLevel prioLevel,
+                                           QEvt const **eventBatch,
+                                           QActive **targetBatch,
                                            uint32_t maxSize) {
     uint32_t count = 0;
-    
+
     /* Extract all events from the staging buffer */
-    while (l_stagingBuffers[prioLevel].front != l_stagingBuffers[prioLevel].rear && 
+    while (l_stagingBuffers[prioLevel].front != l_stagingBuffers[prioLevel].rear &&
            count < maxSize) {
         uint32_t front = l_stagingBuffers[prioLevel].front;
-        
+
         eventBatch[count] = l_stagingBuffers[prioLevel].buffer[front].evt;
         targetBatch[count] = l_stagingBuffers[prioLevel].buffer[front].target;
-        
+
         /* Update front index */
         l_stagingBuffers[prioLevel].front = (front + 1U) % QF_STAGING_BUFFER_SIZE;
         l_stagingBuffers[prioLevel].count--;
-        
+
         count++;
     }
-    
+
     return count;
 }
 
 /*..........................................................................*/
+
 uint32_t QF_getTimestamp(void) {
     return rt_tick_get();
 }
 
-/*..........................................................................*/
 QEvtEx *QF_newEvtEx(enum_t const sig, uint16_t const evtSize, uint8_t priority, uint8_t flags) {
     QEvtEx *evtEx = (QEvtEx *)QF_newX_(evtSize, 0U, sig);
-    
+
     if (evtEx != (QEvtEx *)0) {
         evtEx->timestamp = QF_getTimestamp();
         evtEx->priority = priority;
@@ -376,7 +396,7 @@ QEvtEx *QF_newEvtEx(enum_t const sig, uint16_t const evtSize, uint8_t priority, 
         evtEx->retryCount = 0U;
         evtEx->reserved = 0U;
     }
-    
+
     return evtEx;
 }
 
@@ -455,51 +475,51 @@ static QF_PrioLevel defaultGetPrioLevel(QEvt const *evt) {
 static bool highPerfShouldMerge(QEvt const *prev, QEvt const *next) {
     QEvtEx const *prevEx = (QEvtEx const *)prev;
     QEvtEx const *nextEx = (QEvtEx const *)next;
-    
+
     /* High perf: merge only if explicitly marked as mergeable */
     if (prevEx->super.sig != 0U && nextEx->super.sig != 0U) {
-        return (prev->sig == next->sig && 
+        return (prev->sig == next->sig &&
                 (prevEx->flags & QF_EVT_FLAG_MERGEABLE) != 0U &&
                 (nextEx->flags & QF_EVT_FLAG_MERGEABLE) != 0U);
     }
-    
+
     return false;
 }
 
 static int highPerfComparePriority(QEvt const *a, QEvt const *b) {
     QEvtEx const *aEx = (QEvtEx const *)a;
     QEvtEx const *bEx = (QEvtEx const *)b;
-    
+
     /* High perf: use explicit priority if available */
     if (aEx->super.sig != 0U && bEx->super.sig != 0U) {
         return (int)(aEx->priority - bEx->priority);
     }
-    
+
     /* Fallback to signal comparison */
     return (int)(a->sig - b->sig);
 }
 
 static bool highPerfShouldDrop(QEvt const *evt, QActive const *targetAO) {
     QEvtEx const *evtEx = (QEvtEx const *)evt;
-    
+
     /* High perf: drop events that are not critical and queue is getting full */
     if (evtEx->super.sig != 0U && (evtEx->flags & QF_EVT_FLAG_CRITICAL) == 0U) {
         /* Check target queue depth */
         uint32_t queueDepth = targetAO->eQueue.entry;
         uint32_t queueSize = targetAO->eQueue.size;
-        
+
         /* Drop if queue is more than 80% full */
         if (queueDepth > (queueSize * 4U / 5U)) {
             return true;
         }
     }
-    
+
     return false;
 }
 
 static QF_PrioLevel highPerfGetPrioLevel(QEvt const *evt) {
     QEvtEx const *evtEx = (QEvtEx const *)evt;
-    
+
     /* High perf: use explicit priority mapping */
     if (evtEx->super.sig != 0U) {
         if ((evtEx->flags & QF_EVT_FLAG_CRITICAL) != 0U) {
@@ -512,7 +532,7 @@ static QF_PrioLevel highPerfGetPrioLevel(QEvt const *evt) {
             return QF_PRIO_LOW;
         }
     }
-    
+
     /* Default for regular events */
     return QF_PRIO_NORMAL;
 }
