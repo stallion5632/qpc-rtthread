@@ -44,20 +44,45 @@
 #define QF_CRIT_EXIT(stat_)   (rt_exit_critical())
 
 /* RT-Thread memory pool integration for QF event pools */
-#ifndef QF_ENABLE_RT_MEMPOOL
-#define QF_ENABLE_RT_MEMPOOL 0
+/* Include user-defined RT-Thread mempool configuration before default */
+#ifdef __has_include
+#   if __has_include("qf_rtmpool_config.h")
+#       include "qf_rtmpool_config.h"
+#   endif
 #endif
 
+/* QF event pool macros for RT-Thread mempool */
 #if QF_ENABLE_RT_MEMPOOL
-/* Debug support for RT-Thread memory pool adapter */
-#ifndef QF_RTMPOOL_DEBUG
-#define QF_RTMPOOL_DEBUG 0
+#include "qf_rtmpool.h"  /* RT-Thread memory pool adapter */
+#ifndef QF_EPOOL_TYPE_
+#define QF_EPOOL_TYPE_            QF_RTMemPool
 #endif
+#ifndef QF_EPOOL_INIT_
+/* The default margin is 0, and users can adjust it later through QF_RTMemPool_init */
+#define QF_EPOOL_INIT_(p_, poolSto_, poolSize_, evtSize_) \
+    (QF_RTMemPool_init(&(p_), #p_, (poolSto_), ((poolSize_) / (evtSize_)), (evtSize_), 0))
 #endif
-
-/* QF optimization layer configuration */
+#ifndef QF_EPOOL_EVENT_SIZE_
+#define QF_EPOOL_EVENT_SIZE_(p_)  ((uint_fast16_t)(p_).block_size)
+#endif
+#ifndef QF_EPOOL_GET_
+#define QF_EPOOL_GET_(p_, e_, m_, qs_id_) \
+    ((e_) = (QEvt *)QF_RTMemPool_alloc(&(p_), RT_WAITING_NO))
+#endif
+#ifndef QF_EPOOL_PUT_
+#define QF_EPOOL_PUT_(p_, e_, qs_id_) \
+    (QF_RTMemPool_free(&(p_), (e_)))
+#endif
+#ifndef QF_NEW
+#define QF_NEW(evtType_, margin_, sig_) \
+    ((evtType_ *)QF_newX_RT((rt_uint16_t)sizeof(evtType_), (rt_uint16_t)(margin_), (enum_t)(sig_)))
+#endif
+#ifndef QF_gc
+#define QF_gc(e_) QF_gc_RT(e_)
+#endif
 #ifndef QF_STAGING_BUFFER_SIZE
 #define QF_STAGING_BUFFER_SIZE 32U  /*!< Configurable staging buffer size */
+#endif
 #endif
 
 #ifndef QF_DISPATCHER_STACK_SIZE
@@ -85,57 +110,24 @@ enum RT_Thread_ThreadAttrs {
 */
 #ifdef QP_IMPL
 
-    #define QF_SCHED_STAT_
-    #define QF_SCHED_LOCK_(prio_)   rt_enter_critical()
-    #define QF_SCHED_UNLOCK_()      rt_exit_critical()
+#define QF_SCHED_STAT_
+#define QF_SCHED_LOCK_(prio_)   rt_enter_critical()
+#define QF_SCHED_UNLOCK_()      rt_exit_critical()
 
-#if QF_ENABLE_RT_MEMPOOL
-    #include "qf_rtmpool.h"  /* RT-Thread memory pool adapter */
-
-    /* Override the native QF event pool operations with RT-Thread memory pool */
-    #define QF_EPOOL_TYPE_            QF_RTMemPool
-    #define QF_EPOOL_INIT_(p_, poolSto_, poolSize_, evtSize_) \
-        (QF_RTMemPool_init(&(p_), #p_, (poolSto_), ((poolSize_) / (evtSize_)), (evtSize_)))
-    #define QF_EPOOL_EVENT_SIZE_(p_)  ((uint_fast16_t)(p_).block_size)
-    #define QF_EPOOL_GET_(p_, e_, m_, qs_id_) \
-        do { \
-            QS_CRIT_STAT_ \
-            QS_BEGIN_(QS_QF_MPOOL_GET, (qs_id_)) \
-                QS_TIME_(); \
-                QS_MPC_((QF_MPOOL_CTR)QF_RTMemPool_getFreeCount(&(p_))); \
-                QS_MPC_((QF_MPOOL_CTR)(m_)); \
-            QS_END_() \
-            (e_) = (QEvt *)QF_RTMemPool_alloc(&(p_), RT_WAITING_NO); \
-            if ((e_) != (QEvt *)0) { \
-                (e_)->refCtr_ = 0U; \
-                QS_BEGIN_(QS_QF_MPOOL_GET_ATTEMPT, (qs_id_)) \
-                    QS_TIME_(); \
-                    QS_MPC_((QF_MPOOL_CTR)QF_RTMemPool_getFreeCount(&(p_))); \
-                    QS_MPC_((QF_MPOOL_CTR)(m_)); \
-                QS_END_() \
-            } \
-        } while (0)
-    #define QF_EPOOL_PUT_(p_, e_, qs_id_) \
-        do { \
-            QS_CRIT_STAT_ \
-            QS_BEGIN_(QS_QF_MPOOL_PUT, (qs_id_)) \
-                QS_TIME_(); \
-                QS_MPC_((QF_MPOOL_CTR)QF_RTMemPool_getFreeCount(&(p_))); \
-            QS_END_() \
-            QF_RTMemPool_free(&(p_), (e_)); \
-        } while (0)
-#else
-    /* Native QF event pool operations (default) */
+#if !QF_ENABLE_RT_MEMPOOL
+    /* Native QF event pool operations (default, without QS tracing) */
     #define QF_EPOOL_TYPE_            QMPool
     #define QF_EPOOL_INIT_(p_, poolSto_, poolSize_, evtSize_) \
         (QMPool_init(&(p_), (poolSto_), (poolSize_), (evtSize_)))
     #define QF_EPOOL_EVENT_SIZE_(p_)  ((uint_fast16_t)(p_).blockSize)
     #define QF_EPOOL_GET_(p_, e_, m_, qs_id_) \
-        ((e_) = (QEvt *)QMPool_get(&(p_), (m_), (qs_id_)))
+        (e_) = (QEvt *)QMPool_get(&(p_), (m_), (qs_id_))
     #define QF_EPOOL_PUT_(p_, e_, qs_id_) \
-        (QMPool_put(&(p_), (e_), (qs_id_)))
-#endif /* QF_ENABLE_RT_MEMPOOL */
+        QMPool_put(&(p_), (e_), (qs_id_))
+    #define QF_NEW(evtType_, margin_, sig_) Q_NEW(evtType_, sig_)
+    /* Garbage-collect dynamic event for native QMPool */
+    #define QF_gc(e_) QF_deleteRef_(e_)
+#endif /* !QF_ENABLE_RT_MEMPOOL */
 
 #endif /* ifdef QP_IMPL */
-
 #endif /* QF_PORT_H */

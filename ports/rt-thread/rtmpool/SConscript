@@ -1,9 +1,0 @@
-from building import *
-
-cwd = GetCurrentDir()
-src = Glob('qf_rtmpool.c')
-CPPPATH = [cwd]
-
-group = DefineGroup('qpc_rtmpool', src, depend=['QF_ENABLE_RT_MEMPOOL'], CPPPATH=CPPPATH)
-
-Return('group')

@@ -192,55 +192,11 @@ QEvt * QF_newX_(
     return e; /* can't be NULL if we can't tolerate failed allocation */
 }
 
+#if 0
 /*${QF::QF-dyn::gc} ........................................................*/
 /*! @static @public @memberof QF */
-void QF_gc(QEvt const * const e) {
-    /* is it a dynamic event? */
-    if (e->poolId_ != 0U) {
-        QF_CRIT_STAT_
-        QF_CRIT_E_();
-
-        /* isn't this the last reference? */
-        if (e->refCtr_ > 1U) {
-
-            QS_BEGIN_NOCRIT_PRE_(QS_QF_GC_ATTEMPT,
-                                 (uint_fast8_t)QS_EP_ID + e->poolId_)
-                QS_TIME_PRE_();         /* timestamp */
-                QS_SIG_PRE_(e->sig);    /* the signal of the event */
-                QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
-            QS_END_NOCRIT_PRE_()
-
-            QEvt_refCtr_dec_(e); /* decrement the ref counter */
-
-            QF_CRIT_X_();
-        }
-        /* this is the last reference to this event, recycle it */
-        else {
-            uint_fast8_t const idx = (uint_fast8_t)e->poolId_ - 1U;
-
-            QS_BEGIN_NOCRIT_PRE_(QS_QF_GC,
-                                 (uint_fast8_t)QS_EP_ID + e->poolId_)
-                QS_TIME_PRE_();         /* timestamp */
-                QS_SIG_PRE_(e->sig);    /* the signal of the event */
-                QS_2U8_PRE_(e->poolId_, e->refCtr_); /* pool Id & ref Count */
-            QS_END_NOCRIT_PRE_()
-
-            QF_CRIT_X_();
-
-            /* pool ID must be in range */
-            Q_ASSERT_ID(410, idx < QF_maxPool_);
-
-            /* cast 'const' away, which is OK, because it's a pool event */
-    #ifdef Q_SPY
-            QF_EPOOL_PUT_(QF_ePool_[idx], (QEvt *)e,
-                          (uint_fast8_t)QS_EP_ID + e->poolId_);
-    #else
-            QF_EPOOL_PUT_(QF_ePool_[idx], (QEvt *)e, 0U);
-    #endif
-        }
-    }
-}
-
+// void QF_gc(QEvt const * const e) { ... }
+#endif /* 0 */
 /*${QF::QF-dyn::newRef_} ...................................................*/
 /*! @static @private @memberof QF */
 QEvt const * QF_newRef_(

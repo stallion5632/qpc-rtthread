@@ -23,105 +23,187 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2025-07-21
+* @date Last updated on: 2025-07-22
 * @version Last updated for: @ref qpc_7_3_0
 *
 * @file
-* @brief QF/C RT-Thread Memory Pool Adapter for event pools
+* @brief QF/C RT-Thread Memory Pool Adapter for event pools.
+*
+* This file provides an adapter to use RT-Thread's native memory pools
+* (`rt_mempool`) as the backend for QP/C's dynamic event pools.
 */
 #ifndef QF_RTMPOOL_H
 #define QF_RTMPOOL_H
 
-#include <rtthread.h>   /* RT-Thread API */
 
-/*! @brief RT-Thread memory pool adapter for QP/C event pools
+#include <stdint.h>
+
+
+#include <stdbool.h>    /* For bool type */
+#include <rtthread.h>   /* RT-Thread API */
+#include <rtdef.h>      /* For MISRA C fixed-width types */
+#include <stdbool.h>    /* For bool type */
+#include "qep_port.h"  /* QEP port, for QEvt, enum_t, etc. */
+#include "qf_port.h"   /* QF port */
+
+/*! @brief RT-Thread memory pool adapter for QP/C event pools.
 *
-* This structure adapts the RT-Thread memory pool (rt_mempool) to be used
-* as an event pool in QP/C. It wraps rt_mempool and maintains additional
-* information needed by QP/C.
+* @details
+* This structure adapts the RT-Thread memory pool (`rt_mempool`) to be used
+* as an event pool in QP/C. It wraps `rt_mempool` and maintains additional
+* information required by the QP/C framework, such as pool metadata and
+* usage statistics.
 */
 typedef struct {
     struct rt_mempool rtpool;    /*!< RT-Thread memory pool object */
-    void *storage;               /*!< pointer to the memory storage */
-    uint16_t block_size;         /*!< size of memory blocks in bytes */
-    uint16_t block_count;        /*!< total number of blocks */
+    void    *storage;            /*!< Pointer to the memory storage buffer */
+    char const *name;           /*!< Pointer to the pool name (for debugging) */
+    uint16_t block_size;         /*!< Size of each memory block in bytes */
+    uint16_t block_count;        /*!< Total number of blocks in the pool */
 #ifdef QF_RTMPOOL_DEBUG
-    uint16_t used_count;         /*!< currently allocated blocks (for debug) */
-    uint16_t max_used;           /*!< maximum allocated blocks (for debug) */
+    uint16_t used_count;         /*!< Currently allocated blocks (for debug) */
+    uint16_t max_used;           /*!< Maximum allocated blocks (for debug) */
 #endif
+    uint16_t nMin;               /*!< Minimum number of free blocks (low-water mark) */
+    uint16_t margin;             /*!< Per-pool margin (minimum reserved free blocks) */
 } QF_RTMemPool;
 
-/*! @brief Initialize the RT-Thread memory pool adapter
+/*!
+* @brief Initializes an RT-Thread memory pool adapter.
 *
-* @param[in,out] me       pointer to a QF_RTMemPool struct to initialize
-* @param[in]     name     name of the memory pool (for debugging)
-* @param[in]     storage  pointer to the memory storage for the pool
-* @param[in]     n        number of blocks
-* @param[in]     size     block size in bytes
+* @param[in,out] me      Pointer to a QF_RTMemPool struct to initialize.
+* @param[in]     name    Name of the memory pool (for debugging).
+* @param[in]     storage Pointer to the memory storage for the pool.
+* @param[in]     n       Number of blocks in the pool.
+* @param[in]     size    Size of each block in bytes.
 *
-* @returns
-* RT_EOK on success, or error code on failure
+* @returns RT_EOK on success, or an error code on failure.
 *
-* @note
-* The storage must be properly aligned for the memory blocks.
-* Use ALIGN(RT_ALIGN_SIZE) macro for static arrays.
+* @note The provided storage buffer must be properly aligned. Use the
+*       `ALIGN(RT_ALIGN_SIZE)` macro for static array definitions.
 */
-rt_err_t QF_RTMemPool_init(QF_RTMemPool *const me, const char *name,
-                          void *storage, rt_size_t n, rt_size_t size);
+rt_err_t QF_RTMemPool_init(QF_RTMemPool *const me, char const *name,
+                          void *storage, rt_size_t n, rt_size_t size, uint16_t margin);
 
-/*! @brief Allocate a block from the RT-Thread memory pool
+/*!
+* @brief Allocates a block from the RT-Thread memory pool.
 *
-* @param[in,out] me      pointer to the QF_RTMemPool
-* @param[in]     timeout timeout for allocation (use RT_WAITING_NO for immediate return)
+* @param[in,out] me      Pointer to the QF_RTMemPool instance.
+* @param[in]     timeout Timeout for allocation (e.g., RT_WAITING_NO).
 *
-* @returns
-* Pointer to the allocated block, or NULL if allocation failed
+* @returns Pointer to the allocated block, or NULL if allocation failed.
 */
 void *QF_RTMemPool_alloc(QF_RTMemPool *const me, rt_int32_t timeout);
 
-/*! @brief Free a previously allocated block back to the RT-Thread memory pool
+/*!
+* @brief Frees a previously allocated block back to the RT-Thread memory pool.
 *
-* @param[in,out] me      pointer to the QF_RTMemPool
-* @param[in]     block   pointer to the block to free
+* @param[in,out] me      Pointer to the QF_RTMemPool instance.
+* @param[in]     block   Pointer to the block to free.
 *
-* @returns
-* RT_EOK on success, or error code on failure
+* @returns RT_EOK on success.
 */
 rt_err_t QF_RTMemPool_free(QF_RTMemPool *const me, void *block);
 
-/*! @brief Get the number of free blocks in the RT-Thread memory pool
+/*!
+* @brief Gets the number of free blocks in the memory pool.
 *
-* @param[in] me      pointer to the QF_RTMemPool
+* @param[in] me Pointer to the QF_RTMemPool instance.
 *
-* @returns
-* Number of free blocks in the memory pool
+* @returns Number of free blocks.
 */
 uint16_t QF_RTMemPool_getFreeCount(QF_RTMemPool const *const me);
 
 #ifdef QF_RTMPOOL_DEBUG
-/*! @brief Get the number of used blocks in the RT-Thread memory pool
+/*!
+* @brief Gets the number of used blocks in the memory pool.
 *
-* @param[in] me      pointer to the QF_RTMemPool
+* @param[in] me Pointer to the QF_RTMemPool instance.
 *
-* @returns
-* Number of currently used blocks in the memory pool
+* @returns Number of currently used blocks.
 */
 uint16_t QF_RTMemPool_getUsedCount(QF_RTMemPool const *const me);
 
-/*! @brief Get the maximum number of blocks that have been simultaneously allocated
+/*!
+* @brief Gets the maximum number of blocks that have been simultaneously
+*        allocated (high-water mark).
 *
-* @param[in] me      pointer to the QF_RTMemPool
+* @param[in] me Pointer to the QF_RTMemPool instance.
 *
-* @returns
-* Maximum number of blocks simultaneously used since initialization
+* @returns Maximum number of blocks used since initialization.
 */
 uint16_t QF_RTMemPool_getMaxUsed(QF_RTMemPool const *const me);
 
-/*! @brief Print debug information about the memory pool
+/*!
+* @brief Prints debug statistics for the memory pool.
 *
-* @param[in] me      pointer to the QF_RTMemPool
+* @param[in] me Pointer to the QF_RTMemPool instance.
 */
 void QF_RTMemPool_printStats(QF_RTMemPool const *const me);
 #endif /* QF_RTMPOOL_DEBUG */
+
+/*================== Extended RT-Thread Memory Pool Manager =================*/
+#if defined(QF_RTMPOOL_EXT) && (QF_RTMPOOL_EXT == 1)
+
+/*!
+* @brief Initializes the RT-Thread memory pool manager.
+* @details This function must be called before any memory pools are registered
+*          or used. It is typically called once during system startup.
+*/
+void QF_RTMemPoolMgr_init(void);
+
+/*!
+* @brief Registers an RT-Thread memory pool with the manager.
+*
+* @param[in] rtPool Pointer to the `QF_RTMemPool` instance to register.
+*
+* @returns The assigned pool ID, which is used internally by the framework.
+*/
+rt_uint8_t QF_RTMemPoolMgr_registerPool(QF_RTMemPool * const rtPool);
+
+/*!
+* @brief Allocates a new event with extended features like margin and fallback.
+*
+* @param[in] evtSize The size of the event to allocate.
+* @param[in] margin  The minimum number of free blocks to leave in the ideal
+*                    pool. If the allocation would violate the margin, the
+*                    manager will attempt to fall back to a larger pool.
+* @param[in] sig     The signal for the new event.
+*
+* @returns A pointer to the allocated event, or NULL if allocation fails.
+*/
+QEvt *QF_newX_RT(rt_uint16_t evtSize,
+                 rt_uint16_t margin,
+                 enum_t      sig);
+
+/*!
+* @brief Recycles a dynamic event back to its original memory pool.
+* @details This function is the garbage collector for the RT-Thread pool
+*          adapter. It is called automatically by the QP/C framework when
+*          an event is no longer in use.
+*
+* @param[in] e Pointer to the event to be recycled.
+*/
+void QF_gc_RT(QEvt const * const e);
+
+/*!
+* @brief Retrieves statistics from the memory pool manager.
+*
+* @param[out] nPools    Pointer to store the number of registered pools.
+* @param[out] allocs    Pointer to store the total number of successful allocations.
+* @param[out] fails     Pointer to store the total number of failed allocations.
+* @param[out] fallbacks Pointer to store the total number of fallback allocations.
+*/
+void QF_RTMemPoolMgr_getStats(rt_uint8_t  * nPools,
+                             rt_uint32_t * allocs,
+                             rt_uint32_t * fails,
+                             rt_uint32_t * fallbacks);
+
+/*!
+* @brief Prints statistics for all registered memory pools.
+*/
+void QF_RTMemPoolMgr_printStats(void);
+
+#endif /* defined(QF_RTMPOOL_EXT) && (QF_RTMPOOL_EXT == 1) */
 
 #endif /* QF_RTMPOOL_H */

@@ -1,10 +1,10 @@
-/*============================================================================
-* RT-Thread Memory Pool Integration Example for QP/C
-* Last updated: 2025-07-21
-*
-* This example demonstrates how to use RT-Thread memory pools as the backend
-* for QP/C event pools with zero intrusion to the QP/C core.
-============================================================================*/
+/*****************************************************************************
+* @file    rtmpool_demo.c
+* @brief   Example: Integrating RT-Thread memory pool as QP/C event pool backend
+* @date    Last updated: 2025-07-21
+* @details This example demonstrates how to use RT-Thread memory pools as the
+*          backend for QP/C event pools with zero intrusion to the QP/C core.
+*****************************************************************************/
 
 #include "qpc.h"
 #include <rtthread.h>
@@ -15,20 +15,21 @@
 #include <finsh.h>
 #include <stdio.h>
 
-#ifdef QPC_RTMPoolDemo
+#ifdef QPC_USING_RTMPOOL_DEMO
 Q_DEFINE_THIS_MODULE("rtmpool_demo")
 
-/* Application-specific events */
-enum AppSignals {
+/* Application-specific signals */
+typedef enum {
     TICK_SIG = Q_USER_SIG,
+    MARGIN_SIG,
     MAX_SIG
-};
+} AppSignals;
 
-/* Event with payload */
+/* Data event with payload */
 typedef struct {
     QEvt super;
     uint32_t data;
-    uint32_t _padding; // 保证DataEvt比QEvt大，防止事件池断言
+    uint32_t padding; /* Padding to ensure DataEvt is larger than QEvt */
 } DataEvt;
 
 /* Active Object class */
@@ -39,124 +40,135 @@ typedef struct {
 } DemoAO;
 
 static DemoAO l_demoAO;
-QActive * const AO_Demo = &l_demoAO.super;
+QActive *const AO_Demo = &l_demoAO.super;
 
 /* State machine declarations */
-static QState DemoAO_initial(DemoAO * const me, QEvt const * const e);
-static QState DemoAO_running(DemoAO * const me, QEvt const * const e);
+static QState DemoAO_initial(DemoAO *const me, QEvt const *const e);
+static QState DemoAO_running(DemoAO *const me, QEvt const *const e);
 
-/* Event pools - same declarations as usual QP/C applications */
+
+/* Allocate event storage for both backends */
 ALIGN(RT_ALIGN_SIZE)
-static QF_MPOOL_EL(QEvt) l_smlPoolSto[10]; /* small pool for basic events */
-
+static QF_MPOOL_EL(QEvt) l_smlPoolSto[100];
 ALIGN(RT_ALIGN_SIZE)
-static QF_MPOOL_EL(DataEvt) l_medPoolSto[5]; /* medium pool for DataEvt events */
+static QF_MPOOL_EL(DataEvt) l_medPoolSto[200];
+/* Adjust margin parameters as needed */
+#define QEVTPOOL_MARGIN   0
+#define DATAEVTPOOL_MARGIN 0
 
-/* AO queue and stack storage */
-static QEvt const *l_demoQSto[10];
-static uint8_t l_demoStackSto[512];
+#if defined(QF_ENABLE_RT_MEMPOOL) && (QF_ENABLE_RT_MEMPOOL == 1)
+/* RT-Thread memory pool instances and names (global static) */
+static QF_RTMemPool s_evtPool;
+static QF_RTMemPool s_dataEvtPool;
+static const char poolName_evt[] = "QEvtPool";
+static const char poolName_data[] = "DataEvtPool";
+#endif
 
-/* AO constructor */
-static void DemoAO_ctor(void) {
+/* Active Object queue and stack storage */
+static QEvt const *l_demoQSto[100];
+static uint8_t l_demoStackSto[2048];
+
+/* Active Object constructor */
+static void DemoAO_ctor(void)
+{
     DemoAO *me = &l_demoAO;
     QActive_ctor(&me->super, Q_STATE_CAST(&DemoAO_initial));
     QTimeEvt_ctorX(&me->timeEvt, &me->super, TICK_SIG, 0U);
     me->counter = 0U;
 }
 
-/* Initial state */
+/* Initial state handler */
 static QState DemoAO_initial(DemoAO * const me, QEvt const * const e) {
-    (void)e; /* unused parameter */
-
+    (void)e; /* Parameter not used */
     /* Start periodic time event */
     QTimeEvt_armX(&me->timeEvt, RT_TICK_PER_SECOND, RT_TICK_PER_SECOND);
-
     return Q_TRAN(&DemoAO_running);
 }
 
-/* Running state */
-static QState DemoAO_running(DemoAO * const me, QEvt const * const e) {
-    QState status;
-
-    switch (e->sig) {
-        case Q_ENTRY_SIG: {
-            rt_kprintf("DemoAO: Entered running state\n");
-            status = Q_HANDLED();
-            break;
+/* Running state handler */
+static QState DemoAO_running(DemoAO *const me, QEvt const *const e)
+{
+    switch (e->sig)
+    {
+        case Q_ENTRY_SIG:
+        {
+            rt_kprintf("[DemoAO] Entered running state\n");
+            return Q_HANDLED();
         }
-
-        case TICK_SIG: {
-            ++me->counter;
-
-            /* Every 3 ticks, publish a DataEvt with dynamic allocation */
-            if ((me->counter % 3) == 0) {
-                DataEvt *evt = Q_NEW(DataEvt, MAX_SIG); /* AUTO-allocated event */
-                if (evt != NULL) {
-                    evt->data = me->counter;
-                    rt_kprintf("DemoAO: Created event with data=%u\n", evt->data);
-
-                    /* Post to self (will be garbage collected automatically) */
-                    QACTIVE_POST(&me->super, &evt->super, me);
-                }
-                else {
-                    rt_kprintf("DemoAO: Failed to allocate DataEvt\n");
+        case TICK_SIG:
+        {
+            /* Stress test: allocate multiple events to observe pool recycling */
+            uint32_t i;
+            for (i = 0U; i < 10U; ++i) {
+                QEvt *evt0 = QF_NEW(QEvt, 3, MARGIN_SIG); /* margin=0: allow allocation as long as pool is not empty */
+                if (evt0 != RT_NULL) {
+                    QACTIVE_POST(&me->super, evt0, me);
                 }
             }
-
-            status = Q_HANDLED();
-            break;
-        }
-
-        case MAX_SIG: {
-            DataEvt const *dataEvt = (DataEvt const *)e;
-            rt_kprintf("DemoAO: Received DataEvt with data=%u\n", dataEvt->data);
-
-#if QF_ENABLE_RT_MEMPOOL && QF_RTMPOOL_DEBUG
-            /* QF_pool_ is not a public symbol; direct access is not portable. */
-            /* QF_RTMemPool_printStats(&QF_pool_[0]);*/ /* Small pool stats */
-            /* QF_RTMemPool_printStats(&QF_pool_[1]);*/ /* Medium pool stats */
+            for (i = 0U; i < 2U; ++i) {
+                DataEvt *evt1 = QF_NEW(DataEvt, 1, MAX_SIG);
+                if (evt1 != RT_NULL) {
+                    evt1->data = me->counter * 100U + i;
+                    QACTIVE_POST(&me->super, &evt1->super, me);
+                }
+            }
+            me->counter++;
+            /* Print pool stats every 5 ticks */
+#if defined(QF_ENABLE_RT_MEMPOOL) && (QF_ENABLE_RT_MEMPOOL == 1) && defined(QF_RTMPOOL_EXT) && (QF_RTMPOOL_EXT == 1)
+            if ((me->counter % 5U) == 0U)
+            {
+                QF_RTMemPoolMgr_printStats();
+            }
 #endif
-
-            status = Q_HANDLED();
-            break;
+            return Q_HANDLED();
         }
-
-        default: {
-            status = Q_SUPER(&QHsm_top);
-            break;
+        case MARGIN_SIG:
+        {
+            /* This event is processed and automatically recycled by the framework. */
+            return Q_HANDLED();
+        }
+        case MAX_SIG:
+        {
+            /* This event is processed and automatically recycled by the framework. */
+            return Q_HANDLED();
+        }
+        default:
+        {
+            return Q_SUPER(&QHsm_top);
         }
     }
-
-    return status;
 }
 
-/* Application initialization */
-void rtmpool_demo_init(void) {
-    rt_kprintf("RT-Thread Memory Pool Demo for QP/C\n");
-    rt_kprintf("QP/C version: %s\n", QP_VERSION_STR);
-
-#if QF_ENABLE_RT_MEMPOOL
-    rt_kprintf("RT-Thread memory pool backend is ENABLED\n");
-#else
-    rt_kprintf("Using native QP/C memory pool implementation\n");
-#endif
-
-    /* 打印事件结构体大小，便于排查断言201 */
-    rt_kprintf("sizeof(QEvt)=%d, sizeof(DataEvt)=%d\n", (int)sizeof(QEvt), (int)sizeof(DataEvt));
-
-    /* Initialize the framework */
+/* Demo initialization function */
+void rtmpool_demo_init(void)
+{
+    /* Demo initialization: memory-pool backend selection */
+    rt_kprintf("Memory Pool Demo for QP/C\n");
+    /* Initialize QP/C framework */
     QF_init();
 
-    /* Initialize event pools (严格递增) */
+#if defined(QF_ENABLE_RT_MEMPOOL) && (QF_ENABLE_RT_MEMPOOL == 1)
+    /* RT-Thread mempool initialization */
+#if defined(QF_RTMPOOL_EXT) && (QF_RTMPOOL_EXT == 1)
+    QF_RTMemPoolMgr_init();
+#endif
+    (void)QF_RTMemPool_init(&s_evtPool, poolName_evt, l_smlPoolSto,
+                             Q_DIM(l_smlPoolSto), sizeof(QEvt), QEVTPOOL_MARGIN);
+    QF_RTMemPoolMgr_registerPool(&s_evtPool);
+    (void)QF_RTMemPool_init(&s_dataEvtPool, poolName_data, l_medPoolSto,
+                             Q_DIM(l_medPoolSto), sizeof(DataEvt), DATAEVTPOOL_MARGIN);
+    QF_RTMemPoolMgr_registerPool(&s_dataEvtPool);
+#else
+    /* native QP/C mempool initialization */
     QF_poolInit(l_smlPoolSto, sizeof(l_smlPoolSto), sizeof(QEvt));
     QF_poolInit(l_medPoolSto, sizeof(l_medPoolSto), sizeof(DataEvt));
-
+#endif
     /* Initialize demo active object */
     DemoAO_ctor();
 }
 
-/* Start the application */
-int rtmpool_demo_start(void) {
+int rtmpool_demo_start(void)
+{
     rtmpool_demo_init();
 
     /* Start the active object */
@@ -186,4 +198,4 @@ int main(void)
     return ret;
 }
 
-#endif /* QPC_RTMPoolDemo */
+#endif /* QPC_USING_RTMPOOL_DEMO */

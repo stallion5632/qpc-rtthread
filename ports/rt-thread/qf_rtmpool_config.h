@@ -46,6 +46,16 @@
 #define QF_ENABLE_RT_MEMPOOL            1
 
 /**
+ * @brief Enable extended RT-Thread memory pool features
+ *
+ * Set to 1 to enable advanced features such as:
+ * - Margin support for preventing pool exhaustion
+ * - Fallback allocation to larger pools when a smaller pool cannot satisfy margin
+ * - Memory pool manager for tracking multiple pools
+ */
+#define QF_RTMPOOL_EXT                 1
+
+/**
  * @brief Enable debug features for RT-Thread memory pool adapter
  *
  * Set to 1 to enable additional debug features such as:
