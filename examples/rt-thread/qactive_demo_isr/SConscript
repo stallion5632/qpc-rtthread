@@ -6,16 +6,14 @@ cwd = GetCurrentDir()
 # QActive Demo source files
 src = Split("""
 main.c
-rt_integration.c
 """)
 
 # Include paths
 path = [cwd]
 
 # Define the QActive demo group
-# This group depends on QPC with QActive support
-group = DefineGroup('qpc_qactive_demo', src,
-                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO_BLOCK', 'RT_USING_FINSH'],
+group = DefineGroup('qactive_demo_isr', src,
+                   depend = ['PKG_USING_QPC', 'QPC_USING_QACTIVE_DEMO_ISR', 'RT_USING_FINSH'],
                    CPPPATH = path)
 
 Return('group')

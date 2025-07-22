@@ -23,12 +23,12 @@
 * <info@state-machine.com>
 ============================================================================*/
 /*!
-* @date Last updated on: 2024-01-08
-* @version Last updated for: @ref qpc_7_3_0
-*
-* @file
-* @brief QF/C optimization layer header for RT-Thread
-*/
+ * @date Last updated on: 2024-01-08
+ * @version Last updated for: @ref qpc_7_3_0
+ *
+ * @file
+ * @brief QF/C optimization layer header for RT-Thread
+ */
 #ifndef QF_OPT_LAYER_H_
 #define QF_OPT_LAYER_H_
 
@@ -44,13 +44,14 @@
 #endif
 
 /* Extended event structure with metadata */
-typedef struct {
-    QEvt super;                 /* Base event structure */
-    uint32_t timestamp;         /* Event arrival timestamp */
-    uint8_t priority;           /* Event priority (0-255) */
-    uint8_t flags;              /* Event flags (bit0=mergeable, bit1=critical, etc.) */
-    uint8_t retryCount;         /* Retry count for backpressure */
-    uint8_t reserved;           /* Reserved for future use */
+typedef struct
+{
+    QEvt super;         /* Base event structure */
+    uint32_t timestamp; /* Event arrival timestamp */
+    uint8_t priority;   /* Event priority (0-255) */
+    uint8_t flags;      /* Event flags (bit0=mergeable, bit1=critical, etc.) */
+    uint8_t retryCount; /* Retry count for backpressure */
+    uint8_t reserved;   /* Reserved for future use */
 } QEvtEx;
 
 /* Event flags */
@@ -59,15 +60,17 @@ typedef struct {
 #define QF_EVT_FLAG_NO_DROP     0x04U
 
 /* Priority levels for staging buffers */
-typedef enum {
-    QF_PRIO_HIGH = 0U,
-    QF_PRIO_NORMAL = 1U,
-    QF_PRIO_LOW = 2U,
-    QF_PRIO_LEVELS = 3U
+typedef enum
+{
+    QF_PRIO_HIGH    = 0U,
+    QF_PRIO_NORMAL  = 1U,
+    QF_PRIO_LOW     = 2U,
+    QF_PRIO_LEVELS  = 3U
 } QF_PrioLevel;
 
 /* Dispatcher strategy interface */
-typedef struct {
+typedef struct
+{
     bool (*shouldMerge)(QEvt const *prev, QEvt const *next);
     int (*comparePriority)(QEvt const *a, QEvt const *b);
     bool (*shouldDrop)(QEvt const *evt, QActive const *targetAO);
@@ -75,24 +78,25 @@ typedef struct {
 } QF_DispatcherStrategy;
 
 /* Runtime metrics structure */
-typedef struct {
-    uint32_t dispatchCycles;        /* Number of dispatch cycles */
-    uint32_t eventsProcessed;       /* Total events processed */
-    uint32_t eventsMerged;          /* Events merged */
-    uint32_t eventsDropped;         /* Events dropped */
-    uint32_t eventsRetried;         /* Events retried */
-    uint32_t maxBatchSize;          /* Maximum batch size processed */
-    uint32_t avgBatchSize;          /* Average batch size */
-    uint32_t maxQueueDepth;         /* Maximum queue depth observed */
-    uint32_t postFailures;          /* Failed post attempts */
-    uint32_t stagingOverflows[QF_PRIO_LEVELS];  /* Overflows per priority level */
+typedef struct
+{
+    uint32_t dispatchCycles;                   /* Number of dispatch cycles */
+    uint32_t eventsProcessed;                  /* Total events processed */
+    uint32_t eventsMerged;                     /* Events merged */
+    uint32_t eventsDropped;                    /* Events dropped */
+    uint32_t eventsRetried;                    /* Events retried */
+    uint32_t maxBatchSize;                     /* Maximum batch size processed */
+    uint32_t avgBatchSize;                     /* Average batch size */
+    uint32_t maxQueueDepth;                    /* Maximum queue depth observed */
+    uint32_t postFailures;                     /* Failed post attempts */
+    uint32_t stagingOverflows[QF_PRIO_LEVELS]; /* Overflows per priority level */
 } QF_DispatcherMetrics;
 
 /* Function prototypes */
 void QF_initOptLayer(void);
 void QF_setDispatcherStrategy(QF_DispatcherStrategy const *strategy);
 QF_DispatcherStrategy const *QF_getDispatcherPolicy(void);
-bool QF_postFromISR(QActive * const me, QEvt const * const e);
+bool QF_postFromISR(QActive *const me, QEvt const *const e);
 uint32_t QF_getLostEventCount(void);
 void QF_enableOptLayer(void);
 void QF_disableOptLayer(void);
