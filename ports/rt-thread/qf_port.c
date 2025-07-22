@@ -29,22 +29,31 @@
 * @file
 * @brief QF/C, port to RT-Thread
 */
+
 #define QP_IMPL           /* this is QP implementation */
 #include "qf_port.h"      /* QF port */
 #include "qf_pkg.h"
 #include "qassert.h"
 #include "qf_opt_layer.h" /* QF optimization layer */
 #ifdef Q_SPY              /* QS software tracing enabled? */
-    #include "qs_port.h"  /* QS port */
-    #include "qs_pkg.h"   /* QS package-scope internal interface */
+#include "qs_port.h"  /* QS port */
+#include "qs_pkg.h"   /* QS package-scope internal interface */
 #else
-    #include "qs_dummy.h" /* disable the QS software tracing */
+#include "qs_dummy.h" /* disable the QS software tracing */
 #endif /* Q_SPY */
+
+#ifdef QF_ENABLE_ISR_RELAY
+#include "qf_isr_relay.h"
+#endif
 
 Q_DEFINE_THIS_MODULE("qf_port")
 
 /*..........................................................................*/
 void QF_init(void) {
+    /* Initialize ISR relay system for ISR-safe event publishing */
+#ifdef QF_ENABLE_ISR_RELAY
+    QF_isrRelayInit();
+#endif
 }
 /*..........................................................................*/
 int_t QF_run(void) {
@@ -54,6 +63,11 @@ int_t QF_run(void) {
 
     /* Initialize the optimization layer */
     QF_initOptLayer();
+
+#ifdef QF_ENABLE_ISR_RELAY
+    /* Start ISR relay thread for batch event processing */
+    QF_isrRelayStart();
+#endif
 
     /* produce the QS_QF_RUN trace record */
     QS_BEGIN_PRE_(QS_QF_RUN, 0U)

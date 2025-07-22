@@ -34,7 +34,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#ifdef QPC_USING_QACTIVE_DEMO
+#ifdef QPC_USING_QACTIVE_DEMO_NONBLOCK
 
 /*==========================================================================*/
 /* Global RT-Thread Synchronization Objects - For system threads only */
@@ -378,4 +378,4 @@ MSH_CMD_EXPORT(qactive_config_cmd, Configure QActive parameters);
 MSH_CMD_EXPORT(system_status_cmd, Show system status);
 MSH_CMD_EXPORT(system_reset_cmd, Reset system statistics);
 
-#endif /* QPC_USING_QACTIVE_DEMO */
+#endif /* QPC_USING_QACTIVE_DEMO_NONBLOCK */

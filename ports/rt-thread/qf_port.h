@@ -48,6 +48,16 @@
 #define QF_STAGING_BUFFER_SIZE 32U  /*!< Configurable staging buffer size */
 #endif
 
+/* ISR-safe event publishing support */
+#ifdef QF_ENABLE_ISR_RELAY
+#include "qf_isr_relay.h"
+#define QF_PUBLISH_FROM_ISR(sig_, poolId_, param_) \
+    QF_publishFromISR((sig_), (poolId_), (param_))
+#else
+#define QF_PUBLISH_FROM_ISR(sig_, poolId_, param_) \
+    ((void)0) /* ISR relay disabled */
+#endif
+
 #ifndef QF_DISPATCHER_STACK_SIZE
 #define QF_DISPATCHER_STACK_SIZE 2048U  /*!< Configurable dispatcher stack size */
 #endif
@@ -90,4 +100,3 @@ enum RT_Thread_ThreadAttrs {
 #endif /* ifdef QP_IMPL */
 
 #endif /* QF_PORT_H */
-
