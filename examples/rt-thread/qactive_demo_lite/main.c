@@ -132,7 +132,7 @@ static QState SensorAO_active(SensorAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Sensor: Starting periodic sensor readings\n");
-            QTimeEvt_armX(&me->timeEvt, 200, 200); /* 2 second intervals */
+            QTimeEvt_armX(&me->timeEvt, 10, 10); /* 100 ms intervals */
             status = Q_HANDLED();
             break;
         }
@@ -328,7 +328,7 @@ static QState WorkerAO_working(WorkerAO * const me, QEvt const * const e) {
             rt_kprintf("Worker: Processing work (total: %u)\n", me->work_count);
 
             /* Simulate work processing with timeout */
-            QTimeEvt_armX(&me->timeEvt, 50, 0); /* 500ms delay */
+            QTimeEvt_armX(&me->timeEvt, 5, 0); /* 50ms delay */
 
             status = Q_HANDLED();
             break;
@@ -388,7 +388,7 @@ static QState MonitorAO_monitoring(MonitorAO * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             rt_kprintf("Monitor: Starting periodic monitoring\n");
-            QTimeEvt_armX(&me->timeEvt, 300, 300); /* 3 second intervals */
+            QTimeEvt_armX(&me->timeEvt, 10, 10); /* 100 ms intervals */
             status = Q_HANDLED();
             break;
         }

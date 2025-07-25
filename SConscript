@@ -33,6 +33,9 @@ demo_groups = []
 if GetDepend(['QPC_USING_QACTIVE_DEMO_LITE']):
     demo_groups.append(SConscript('examples/rt-thread/qactive_demo_lite/SConscript'))
 
+if GetDepend(['QPC_USING_QACTIVE_DEMO_LITE_MERGED']):
+    demo_groups.append(SConscript('examples/rt-thread/qactive_demo_lite_merged/SConscript'))
+
 if GetDepend(['QPC_USING_QACTIVE_DEMO_BLOCK']):
     demo_groups.append(SConscript('examples/rt-thread/qactive_demo_block/SConscript'))
 
